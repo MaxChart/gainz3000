@@ -93,17 +93,43 @@ const STORAGE_KEY="gainzmachine3000_v1";
 const loadData=()=>{try{const r=localStorage.getItem(STORAGE_KEY);return r?JSON.parse(r):{logs:{},workoutCount:0}}catch{return{logs:{},workoutCount:0}}};
 const saveData=(d)=>{try{localStorage.setItem(STORAGE_KEY,JSON.stringify(d))}catch{}};
 
-const useAudio=()=>{
-  const ref=useRef(null);
-  const ctx=()=>{if(!ref.current)ref.current=new(window.AudioContext||window.webkitAudioContext)();return ref.current};
-  const note=(f,d,t="square",v=.15)=>{try{const c=ctx(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.type=t;o.frequency.value=f;g.gain.setValueAtTime(v,c.currentTime);g.gain.exponentialRampToValueAtTime(.001,c.currentTime+d);o.start();o.stop(c.currentTime+d)}catch{}};
-  return{
-    success:()=>[523,659,784,1047].forEach((f,i)=>setTimeout(()=>note(f,.15),i*80)),
-    timerDone:()=>[440,554,659,880].forEach((f,i)=>setTimeout(()=>note(f,.2,"square",.2),i*100)),
-    startJingle:()=>[262,294,330,392,523,392,440,523].forEach((f,i)=>setTimeout(()=>note(f,.18,"square",.12),i*120)),
-    click:()=>note(220,.05,"square",.08),
-  };
+// Global shared AudioContext - unlocked on first user gesture
+let _sharedCtx = null;
+const getSharedCtx = async () => {
+  if (!_sharedCtx) {
+    _sharedCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (_sharedCtx.state !== "running") {
+    await _sharedCtx.resume();
+    // iOS silent buffer unlock
+    const buf = _sharedCtx.createBuffer(1, 1, 22050);
+    const src = _sharedCtx.createBufferSource();
+    src.buffer = buf; src.connect(_sharedCtx.destination); src.start(0);
+  }
+  return _sharedCtx;
 };
+
+const playNote = async (freq, dur, type="square", vol=0.12, detune=0) => {
+  try {
+    const c = await getSharedCtx();
+    const o = c.createOscillator(), g = c.createGain();
+    o.connect(g); g.connect(c.destination);
+    o.type = type; o.frequency.value = freq;
+    if (detune) o.detune.value = detune;
+    const now = c.currentTime;
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(vol, now + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, now + dur);
+    o.start(now); o.stop(now + dur + 0.05);
+  } catch {}
+};
+
+const useAudio=()=>({
+  success:()=>[523,659,784,1047].forEach((f,i)=>setTimeout(()=>playNote(f,.15),i*80)),
+  timerDone:()=>[440,554,659,880].forEach((f,i)=>setTimeout(()=>playNote(f,.2,"square",.2),i*100)),
+  startJingle:()=>[262,294,330,392,523,392,440,523].forEach((f,i)=>setTimeout(()=>playNote(f,.18,"square",.12),i*120)),
+  click:()=>playNote(220,.05,"square",.08),
+});
 
 
 const Walkman=({playing,onToggle})=>(
@@ -382,21 +408,8 @@ function createMusicEngine() {
   let loopTimeout = null;
   let ctx = null;
 
-  // iOS unlock: create fresh AudioContext ON the user gesture, every time
   const unlock = async () => {
-    if (!ctx || ctx.state === "closed") {
-      ctx = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    if (ctx.state === "suspended" || ctx.state === "interrupted") {
-      await ctx.resume();
-    }
-    // iOS silent test - play a silent buffer to fully unlock
-    const buf = ctx.createBuffer(1, 1, 22050);
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-    src.connect(ctx.destination);
-    src.start(0);
-    return ctx;
+    return await getSharedCtx();
   };
 
   const note = (c, freq, start, dur, type="square", vol=0.1, detune=0) => {
@@ -505,7 +518,7 @@ function createMusicEngine() {
     }
     [0.5,1.5,2.5,3.5,4.5,5.5,6.5,7.5,8.5,9.5,10.5,11.5,12.5,13.5,14.5,15.5].forEach(b => kick(c,t0+b*B));
     loopTimeout = setTimeout(() => {
-      if (playing && ctx) scheduleLoop(ctx, t0 + totalBeats*B);
+      if (playing) getSharedCtx().then(c => scheduleLoop(c, t0 + totalBeats*B));
     }, totalBeats*B*1000 - 150);
   };
 
