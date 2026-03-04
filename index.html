@@ -378,12 +378,24 @@ const Nav=({active,onNav})=><div style={{position:"fixed",bottom:0,left:0,right:
 
 // ─── MUSIC ENGINE ─────────────────────────────────────────
 function createMusicEngine() {
-  let ctx = null;
   let playing = false;
   let loopTimeout = null;
+  let ctx = null;
 
-  const getCtx = () => {
-    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+  // iOS unlock: create fresh AudioContext ON the user gesture, every time
+  const unlock = async () => {
+    if (!ctx || ctx.state === "closed") {
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (ctx.state === "suspended" || ctx.state === "interrupted") {
+      await ctx.resume();
+    }
+    // iOS silent test - play a silent buffer to fully unlock
+    const buf = ctx.createBuffer(1, 1, 22050);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    src.start(0);
     return ctx;
   };
 
@@ -442,104 +454,76 @@ function createMusicEngine() {
     } catch {}
   };
 
-  // 138 BPM - Eurodance, 2 Unlimited DNA
-  // Key of F minor - dark but pumping, exactly that vibe
-  // F3=175 G3=196 Ab3=208 Bb3=233 C4=262 Db4=277 Eb4=311 F4=349 G4=392 Ab4=415 Bb4=466 C5=523 F5=698
   const BPM = 138;
   const B = 60 / BPM;
 
-  const scheduleLoop = (t0) => {
-    const c = getCtx();
-
-    // ── ICONIC HORN RIFF - the "da da DA da da" energy ──
-    // Short punchy stabs, very 2 Unlimited
+  const scheduleLoop = (c, t0) => {
     const horn = [
-      // Main riff - 4 bars, repeats
-      [523,0,0.3],  [523,0.5,0.3],  [622,1,0.5],
-      [523,2,0.3],  [523,2.5,0.3],  [466,3,0.3],  [523,3.5,0.3],
-
-      [523,4,0.3],  [523,4.5,0.3],  [622,5,0.5],
-      [523,6,0.3],  [622,6.5,0.3],  [698,7,0.8],
-
-      // Second section - builds
-      [523,8,0.3],  [523,8.5,0.3],  [622,9,0.5],
-      [523,10,0.3], [523,10.5,0.3], [466,11,0.3], [523,11.5,0.3],
-
-      // Peak
-      [698,12,0.4], [622,12.5,0.4], [523,13,0.4], [466,13.5,0.4],
-      [415,14,0.4], [466,14.5,0.4], [523,15,0.8],
+      [523,0,0.3],[523,0.5,0.3],[622,1,0.5],
+      [523,2,0.3],[523,2.5,0.3],[466,3,0.3],[523,3.5,0.3],
+      [523,4,0.3],[523,4.5,0.3],[622,5,0.5],
+      [523,6,0.3],[622,6.5,0.3],[698,7,0.8],
+      [523,8,0.3],[523,8.5,0.3],[622,9,0.5],
+      [523,10,0.3],[523,10.5,0.3],[466,11,0.3],[523,11.5,0.3],
+      [698,12,0.4],[622,12.5,0.4],[523,13,0.4],[466,13.5,0.4],
+      [415,14,0.4],[466,14.5,0.4],[523,15,0.8],
     ];
-
-    horn.forEach(([freq, beat, dur]) => {
-      const t = t0 + beat * B;
-      // Thick brass sound: sawtooth + detune for width
-      note(c, freq, t, dur*B*0.85, "sawtooth", 0.08);
-      note(c, freq, t, dur*B*0.85, "sawtooth", 0.05, 15);
-      note(c, freq, t, dur*B*0.85, "sawtooth", 0.05, -15);
-      // Square overtone for bite
-      note(c, freq*2, t, dur*B*0.6, "square", 0.025);
+    horn.forEach(([freq,beat,dur]) => {
+      const t = t0 + beat*B;
+      note(c,freq,t,dur*B*0.85,"sawtooth",0.08);
+      note(c,freq,t,dur*B*0.85,"sawtooth",0.05,15);
+      note(c,freq,t,dur*B*0.85,"sawtooth",0.05,-15);
+      note(c,freq*2,t,dur*B*0.6,"square",0.025);
     });
-
-    // ── BASS - the pumping synth bass, very eurodance ──
-    // Repeating pattern, punchy
     const bassPattern = [
       [175,0,0.4],[175,0.5,0.2],[175,0.75,0.2],
       [175,1,0.4],[196,1.5,0.3],[175,1.75,0.2],
       [175,2,0.4],[175,2.5,0.2],[175,2.75,0.2],
       [175,3,0.4],[208,3.5,0.3],[196,3.75,0.2],
     ];
-    // Play bass pattern twice per loop
-    for (let rep = 0; rep < 4; rep++) {
-      bassPattern.forEach(([freq, beat, dur]) => {
-        const t = t0 + (rep * 4 + beat) * B;
-        note(c, freq, t, dur*B*0.8, "triangle", 0.25);
-        note(c, freq, t, dur*B*0.4, "sawtooth", 0.08); // attack click
+    for (let rep=0; rep<4; rep++) {
+      bassPattern.forEach(([freq,beat,dur]) => {
+        const t = t0+(rep*4+beat)*B;
+        note(c,freq,t,dur*B*0.8,"triangle",0.25);
+        note(c,freq,t,dur*B*0.4,"sawtooth",0.08);
       });
     }
-
-    // ── PAD CHORDS - background atmosphere ──
     const pads = [
-      [[175,208,262], 0, 3.9],
-      [[196,233,311], 4, 3.9],
-      [[175,208,262], 8, 3.9],
-      [[208,262,311], 12, 3.9],
+      [[175,208,262],0,3.9],[[196,233,311],4,3.9],
+      [[175,208,262],8,3.9],[[208,262,311],12,3.9],
     ];
-    pads.forEach(([freqs, beat, dur]) => {
-      const t = t0 + beat * B;
-      freqs.forEach(f => note(c, f, t, dur*B*0.95, "sawtooth", 0.018));
+    pads.forEach(([freqs,beat,dur]) => {
+      const t = t0+beat*B;
+      freqs.forEach(f => note(c,f,t,dur*B*0.95,"sawtooth",0.018));
     });
-
-    // ── DRUMS - four on floor, eurodance ──
     const totalBeats = 16;
-    for (let i = 0; i < totalBeats; i++) {
-      const t = t0 + i * B;
-      kick(c, t);                    // 4-on-the-floor
-      if (i % 2 === 1) snare(c, t); // snare 2 & 4
-      hihat(c, t);                   // 8th hihats
-      hihat(c, t + B*0.5, 0.05);
+    for (let i=0; i<totalBeats; i++) {
+      const t = t0+i*B;
+      kick(c,t);
+      if (i%2===1) snare(c,t);
+      hihat(c,t); hihat(c,t+B*0.5,0.05);
     }
-    // Offbeat kicks (the pump)
-    [0.5,1.5,2.5,3.5,4.5,5.5,6.5,7.5,8.5,9.5,10.5,11.5,12.5,13.5,14.5,15.5].forEach(b => {
-      kick(c, t0 + b * B);
-    });
-
-    const loopDur = totalBeats * B * 1000;
+    [0.5,1.5,2.5,3.5,4.5,5.5,6.5,7.5,8.5,9.5,10.5,11.5,12.5,13.5,14.5,15.5].forEach(b => kick(c,t0+b*B));
     loopTimeout = setTimeout(() => {
-      if (playing) scheduleLoop(t0 + totalBeats * B);
-    }, loopDur - 150);
+      if (playing && ctx) scheduleLoop(ctx, t0 + totalBeats*B);
+    }, totalBeats*B*1000 - 150);
   };
 
   return {
-    toggle() {
+    async toggle() {
       if (playing) {
         playing = false;
         clearTimeout(loopTimeout);
         return false;
       } else {
         playing = true;
-        const c = getCtx();
-        if (c.state === "suspended") c.resume();
-        scheduleLoop(c.currentTime + 0.05);
+        try {
+          const c = await unlock();
+          if (playing) scheduleLoop(c, c.currentTime + 0.1);
+        } catch(e) {
+          playing = false;
+          return false;
+        }
         return true;
       }
     },
@@ -556,9 +540,9 @@ function App(){
   const musicRef=useRef(null);
   const [musicPlaying,setMusicPlaying]=useState(false);
   useEffect(()=>{ musicRef.current=createMusicEngine(); },[]);
-  const toggleMusic=()=>{
+  const toggleMusic=async()=>{
     if(!musicRef.current)return;
-    const nowPlaying=musicRef.current.toggle();
+    const nowPlaying=await musicRef.current.toggle();
     setMusicPlaying(nowPlaying);
   };
   const startWorkout=d=>{setActiveDay(d);setView("workout")};
