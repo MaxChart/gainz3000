@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="GAINZ 3000"/>
+  <meta name="theme-color" content="#0a0010"/>
+  <title>GAINZ MACHINE 3000</title>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;background:#0a0010;overflow-x:hidden}
+    body{font-family:'Press Start 2P',monospace;color:#fff}
+    @keyframes glitch{0%,100%{text-shadow:-2px 0 #ff2d78,2px 0 #00e5ff}25%{text-shadow:2px 0 #ff2d78,-2px 0 #00e5ff}50%{text-shadow:-2px 2px #b44fff,2px -2px #e8ff3c}75%{text-shadow:2px -2px #ff2d78,-2px 2px #00e5ff}}
+    @keyframes grid-scroll{from{background-position:0 0}to{background-position:0 80px}}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+    @keyframes slide-in{from{transform:translateY(30px);opacity:0}to{transform:translateY(0);opacity:1}}
+    @keyframes sun-pulse{0%,100%{opacity:.9}50%{opacity:1}}
+    @keyframes neon-flicker{0%,19%,21%,23%,25%,54%,56%,100%{opacity:1}20%,24%,55%{opacity:.4}}
+    @keyframes rainbow-bar{0%{background-position:0% 50%}100%{background-position:200% 50%}}
+    .glitch-text{animation:glitch 3s infinite}
+    .neon-flicker{animation:neon-flicker 4s infinite}
+    .blink{animation:blink 1s step-end infinite}
+    .slide-in{animation:slide-in .3s ease-out}
+    .btn-retro{font-family:'Press Start 2P',monospace;font-size:9px;cursor:pointer;border:2px solid;padding:10px 14px;letter-spacing:1px;transition:all .1s;text-transform:uppercase;position:relative}
+    .btn-retro:active{transform:translate(2px,2px)}
+    .btn-primary{background:#ff2d78;border-color:#ff2d78;color:#000;box-shadow:4px 4px 0 #7a0033,0 0 20px rgba(255,45,120,.5)}
+    .btn-cyan{background:#00e5ff;border-color:#00e5ff;color:#000;box-shadow:4px 4px 0 #006070,0 0 20px rgba(0,229,255,.4)}
+    .btn-yellow{background:#e8ff3c;border-color:#e8ff3c;color:#000;box-shadow:4px 4px 0 #606800,0 0 20px rgba(232,255,60,.4)}
+    .btn-ghost{background:transparent;border-color:#444;color:#888;box-shadow:2px 2px 0 #222}
+    .btn-ghost:hover{border-color:#666;color:#aaa}
+    .card-retro{border:2px solid #333;background:rgba(10,0,20,.9);position:relative}
+    .card-retro::before{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,45,120,.03) 0%,transparent 100%);pointer-events:none}
+    .input-retro{font-family:'Press Start 2P',monospace;font-size:14px;background:#0a0010;border:2px solid #333;color:#e8ff3c;padding:8px;text-align:center;outline:none}
+    .input-retro:focus{border-color:#ff2d78;box-shadow:0 0 10px rgba(255,45,120,.3)}
+    .progress-bar-retro{height:12px;background:#111;border:2px solid #333;overflow:hidden}
+    .progress-bar-fill{height:100%;background:linear-gradient(90deg,#ff2d78,#b44fff,#00e5ff);background-size:200% 100%;animation:rainbow-bar 2s linear infinite;transition:width .5s steps(10)}
+    ::-webkit-scrollbar{width:6px}
+    ::-webkit-scrollbar-track{background:#0a0010}
+    ::-webkit-scrollbar-thumb{background:#ff2d78}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script type="text/babel">
+const {useState,useEffect,useRef}=React;
+
+const PROGRAM={
+  "UPPER-A":{label:"UPPER A",description:"// PUSH PROTOCOL //",emoji:"💪",restCompound:180,restAccessory:90,exercises:[
+    {id:"swiss_press",name:"Swiss Bar Bench Press",sets:4,repRange:"6-8",type:"compound",notes:"Neutral grip — wrist-safe"},
+    {id:"incline_db",name:"Incline DB Press",sets:3,repRange:"8-12",type:"compound",notes:"PowerBlocks, controlled descent"},
+    {id:"cable_row",name:"Cable Seated Row",sets:4,repRange:"8-12",type:"compound",notes:"Full stretch, chest pad"},
+    {id:"lat_pull",name:"Lat Pulldown",sets:3,repRange:"10-12",type:"accessory",notes:"Depress scapula first"},
+    {id:"cable_fly",name:"Cable Chest Fly",sets:3,repRange:"12-15",type:"accessory",notes:"Low to high, squeeze hard"},
+    {id:"face_pull",name:"Face Pull",sets:3,repRange:"15-20",type:"accessory",notes:"External rotation — shoulder health"},
+    {id:"hammer_curl",name:"Hammer Curl",sets:3,repRange:"10-12",type:"accessory",notes:"Neutral grip, no wrist torque"},
+  ]},
+  "LOWER-A":{label:"LOWER A",description:"// QUAD DESTROYER //",emoji:"🦵",restCompound:180,restAccessory:90,exercises:[
+    {id:"belt_squat",name:"Belt Squat",sets:4,repRange:"6-8",type:"compound",notes:"No spinal load — go deep"},
+    {id:"leg_press",name:"Leg Press",sets:4,repRange:"8-12",type:"compound",notes:"Shoulder width, full ROM"},
+    {id:"trap_rdl",name:"Trap Bar RDL",sets:3,repRange:"8-10",type:"compound",notes:"Hip hinge, soft knees"},
+    {id:"leg_curl",name:"Leg Curl",sets:3,repRange:"10-12",type:"accessory",notes:"Slow eccentric, 3 sec down"},
+    {id:"leg_ext",name:"Leg Extension",sets:3,repRange:"12-15",type:"accessory",notes:"Full extension, squeeze top"},
+    {id:"calf_raise",name:"Standing Calf Raise",sets:4,repRange:"12-15",type:"accessory",notes:"Full stretch at bottom"},
+  ]},
+  "UPPER-B":{label:"UPPER B",description:"// PULL PROTOCOL //",emoji:"🔥",restCompound:180,restAccessory:90,exercises:[
+    {id:"trap_row",name:"Trap Bar Bent Row",sets:4,repRange:"6-8",type:"compound",notes:"Neutral grip, elbows back"},
+    {id:"safety_ohp",name:"Safety Bar OHP",sets:3,repRange:"8-10",type:"compound",notes:"Strict, no lower back arch"},
+    {id:"cable_pullover",name:"Cable Straight-Arm Pullover",sets:3,repRange:"12-15",type:"accessory",notes:"Lat stretch, long ROM"},
+    {id:"db_row",name:"1-Arm DB Row",sets:3,repRange:"10-12",type:"accessory",notes:"Full stretch at bottom"},
+    {id:"rear_delt",name:"Rear Delt Cable Fly",sets:3,repRange:"15-20",type:"accessory",notes:"Horizontal abduction"},
+    {id:"cable_curl",name:"Cable Curl",sets:3,repRange:"10-12",type:"accessory",notes:"Wrist neutral, no swing"},
+    {id:"tricep_push",name:"Tricep Pushdown",sets:3,repRange:"12-15",type:"accessory",notes:"Rope or straight bar"},
+  ]},
+  "LOWER-B":{label:"LOWER B",description:"// POSTERIOR CHAIN //",emoji:"⚡",restCompound:180,restAccessory:90,exercises:[
+    {id:"trap_dead",name:"Trap Bar Deadlift",sets:4,repRange:"5-6",type:"compound",notes:"High handles if back sensitive"},
+    {id:"hack_squat",name:"Hack Squat",sets:3,repRange:"8-10",type:"compound",notes:"Deep ROM, controlled"},
+    {id:"db_lunge",name:"DB Walking Lunge",sets:3,repRange:"10/leg",type:"compound",notes:"Upright torso, PowerBlocks"},
+    {id:"nordic",name:"Nordic Curl / Leg Curl",sets:3,repRange:"6-10",type:"accessory",notes:"Eccentric focus — 4 sec down"},
+    {id:"hip_thrust",name:"Hip Thrust (DB)",sets:3,repRange:"12-15",type:"accessory",notes:"Bench + DB on hips"},
+    {id:"calf_seated",name:"Seated Calf Raise",sets:4,repRange:"12-15",type:"accessory",notes:"Soleus focus"},
+  ]},
+};
+const DAY_ORDER=["UPPER-A","LOWER-A","UPPER-B","LOWER-B"];
+
+const STORAGE_KEY="gainzmachine3000_v1";
+const loadData=()=>{try{const r=localStorage.getItem(STORAGE_KEY);return r?JSON.parse(r):{logs:{},workoutCount:0}}catch{return{logs:{},workoutCount:0}}};
+const saveData=(d)=>{try{localStorage.setItem(STORAGE_KEY,JSON.stringify(d))}catch{}};
+
+const useAudio=()=>{
+  const ref=useRef(null);
+  const ctx=()=>{if(!ref.current)ref.current=new(window.AudioContext||window.webkitAudioContext)();return ref.current};
+  const note=(f,d,t="square",v=.15)=>{try{const c=ctx(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.type=t;o.frequency.value=f;g.gain.setValueAtTime(v,c.currentTime);g.gain.exponentialRampToValueAtTime(.001,c.currentTime+d);o.start();o.stop(c.currentTime+d)}catch{}};
+  return{
+    success:()=>[523,659,784,1047].forEach((f,i)=>setTimeout(()=>note(f,.15),i*80)),
+    timerDone:()=>[440,554,659,880].forEach((f,i)=>setTimeout(()=>note(f,.2,"square",.2),i*100)),
+    startJingle:()=>[262,294,330,392,523,392,440,523].forEach((f,i)=>setTimeout(()=>note(f,.18,"square",.12),i*120)),
+    click:()=>note(220,.05,"square",.08),
+  };
+};
+
+const PixelChart=({data,color="#ff2d78"})=>{
+  if(!data||data.length<2)return<div style={{fontFamily:"'Press Start 2P',monospace",fontSize:8,color:"#444",textAlign:"center",padding:16}}>NO DATA YET<br/>PLAY MORE</div>;
+  const vals=data.map(d=>(d.weight||0)*(d.reps||1));
+  const min=Math.min(...vals),max=Math.max(...vals),range=max-min||1;
+  const W=260,H=60,P=8,PX=4;
+  const pts=vals.map((v,i)=>({x:Math.round((P+(i/(vals.length-1))*(W-P*2))/PX)*PX,y:Math.round((H-P-((v-min)/range)*(H-P*2))/PX)*PX}));
+  return<svg width={W} height={H} style={{imageRendering:"pixelated"}}>
+    {pts.map((p,i)=>i>0&&<line key={i} x1={pts[i-1].x} y1={pts[i-1].y} x2={p.x} y2={p.y} stroke={color} strokeWidth={PX} strokeLinecap="square"/>)}
+    {pts.map((p,i)=><rect key={i} x={p.x-PX} y={p.y-PX} width={PX*2} height={PX*2} fill={color}/>)}
+    <line x1={P} y1={H-P} x2={W-P} y2={H-P} stroke="#333" strokeWidth={2}/>
+  </svg>;
+};
+
+const Guy=()=><svg width="40" height="60" viewBox="0 0 10 15" style={{imageRendering:"pixelated"}}>
+  <rect x="2" y="0" width="6" height="1" fill="#c8860a"/>
+  <rect x="1" y="1" width="2" height="3" fill="#c8860a"/>
+  <rect x="3" y="1" width="4" height="3" fill="#f4c07a"/>
+  <rect x="3" y="3" width="4" height="1" fill="#8B4513"/>
+  <rect x="2" y="4" width="6" height="4" fill="#ff2d78"/>
+  <rect x="0" y="4" width="2" height="4" fill="#f4c07a"/>
+  <rect x="8" y="4" width="2" height="4" fill="#f4c07a"/>
+  <rect x="2" y="8" width="6" height="3" fill="#00e5ff"/>
+  <rect x="2" y="11" width="2" height="3" fill="#f4c07a"/>
+  <rect x="6" y="11" width="2" height="3" fill="#f4c07a"/>
+  <rect x="1" y="13" width="3" height="2" fill="#fff"/>
+  <rect x="6" y="13" width="3" height="2" fill="#fff"/>
+</svg>;
+
+const Girl=()=><svg width="40" height="60" viewBox="0 0 10 15" style={{imageRendering:"pixelated"}}>
+  <rect x="1" y="0" width="8" height="2" fill="#ff69b4"/>
+  <rect x="0" y="0" width="2" height="4" fill="#ff69b4"/>
+  <rect x="8" y="0" width="2" height="4" fill="#ff69b4"/>
+  <rect x="3" y="1" width="4" height="3" fill="#f4c07a"/>
+  <rect x="2" y="4" width="6" height="4" fill="#e8ff3c"/>
+  <rect x="0" y="4" width="2" height="3" fill="#f4c07a"/>
+  <rect x="8" y="4" width="2" height="3" fill="#f4c07a"/>
+  <rect x="2" y="8" width="6" height="5" fill="#b44fff"/>
+  <rect x="2" y="11" width="2" height="3" fill="#ff2d78"/>
+  <rect x="6" y="11" width="2" height="3" fill="#ff2d78"/>
+  <rect x="1" y="13" width="3" height="2" fill="#fff"/>
+  <rect x="6" y="13" width="3" height="2" fill="#fff"/>
+</svg>;
+
+const BG=()=>{
+  const stars=useRef([...Array(20)].map(()=>({l:Math.random()*100,t:Math.random()*50,s:Math.random()>.7?3:2,d:Math.random()*3,dur:1+Math.random()*3}))).current;
+  return<div style={{position:"fixed",inset:0,zIndex:0,overflow:"hidden",pointerEvents:"none"}}>
+    <div style={{position:"absolute",inset:0,background:"linear-gradient(180deg,#0a0010 0%,#1a0030 40%,#3d0050 60%,#ff2d78 80%,#ff6b35 90%,#ffa500 100%)"}}/>
+    <div style={{position:"absolute",bottom:"25%",left:"50%",transform:"translateX(-50%)",width:120,height:120,borderRadius:"50%",background:"linear-gradient(180deg,#ffa500 0%,#ff6b35 50%,#ff2d78 100%)",boxShadow:"0 0 60px rgba(255,107,53,.6)",animation:"sun-pulse 3s ease-in-out infinite",overflow:"hidden"}}>
+      {[.3,.42,.54,.66,.78].map((y,i)=><div key={i} style={{position:"absolute",left:0,right:0,height:6,top:`${y*100}%`,background:"#0a0010"}}/>)}
+    </div>
+    <div style={{position:"absolute",bottom:0,left:"-50%",right:"-50%",height:"30%",backgroundImage:"repeating-linear-gradient(90deg,rgba(180,79,255,.3) 0px,transparent 1px,transparent 60px,rgba(180,79,255,.3) 61px),repeating-linear-gradient(0deg,rgba(180,79,255,.3) 0px,transparent 1px,transparent 40px,rgba(180,79,255,.3) 41px)",backgroundSize:"61px 41px",animation:"grid-scroll 2s linear infinite",transform:"perspective(200px) rotateX(30deg)",transformOrigin:"top center"}}/>
+    {stars.map((s,i)=><div key={i} style={{position:"absolute",left:`${s.l}%`,top:`${s.t}%`,width:s.s,height:s.s,background:"#fff",animation:`blink ${s.dur}s step-end infinite`,animationDelay:`${s.d}s`}}/>)}
+  </div>;
+};
+
+const Scanlines=()=><div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:9999,background:"repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.08) 2px,rgba(0,0,0,.08) 4px)"}}/>;
+
+const Timer=({seconds,onDone,onSkip,audio})=>{
+  const [rem,setRem]=useState(seconds);
+  const [active,setActive]=useState(false);
+  const ref=useRef(null);
+  useEffect(()=>{setRem(seconds);setActive(false);clearInterval(ref.current)},[seconds]);
+  const start=()=>{audio.click();setActive(true);ref.current=setInterval(()=>setRem(p=>{if(p<=1){clearInterval(ref.current);setActive(false);audio.timerDone();if(navigator.vibrate)navigator.vibrate([200,100,200]);onDone?.();return 0}return p-1}),1000)};
+  const pause=()=>{setActive(false);clearInterval(ref.current);audio.click()};
+  const reset=()=>{setActive(false);clearInterval(ref.current);setRem(seconds);audio.click()};
+  const pct=Math.round(((seconds-rem)/seconds)*10)*10;
+  const mins=Math.floor(rem/60),secs=rem%60,done=rem===0;
+  return<div className="card-retro" style={{padding:16,margin:"12px 0"}}>
+    <div style={{fontSize:7,color:"#b44fff",letterSpacing:2,marginBottom:10}}>// REST TIMER //</div>
+    <div style={{display:"flex",alignItems:"center",gap:16}}>
+      <div style={{fontSize:28,color:done?"#e8ff3c":"#00e5ff",fontFamily:"'Press Start 2P',monospace",textShadow:done?"0 0 20px #e8ff3c":"0 0 20px #00e5ff",minWidth:80}}>{mins}:{secs.toString().padStart(2,"0")}</div>
+      <div style={{flex:1}}>
+        <div className="progress-bar-retro"><div className="progress-bar-fill" style={{width:`${pct}%`}}/></div>
+        <div style={{fontSize:7,color:"#444",marginTop:4}}>{seconds}s TOTAL</div>
+      </div>
+    </div>
+    <div style={{display:"flex",gap:8,marginTop:12}}>
+      <button className="btn-retro btn-ghost" onClick={reset} style={{fontSize:7,padding:"6px 10px"}}>RST</button>
+      <button className={`btn-retro ${active?"btn-ghost":"btn-cyan"}`} onClick={active?pause:start} style={{fontSize:7,flex:1}}>{active?"⏸ PAUSE":done?"✓ DONE":rem===seconds?"▶ START":"▶ RESUME"}</button>
+      <button className="btn-retro btn-ghost" onClick={()=>{clearInterval(ref.current);audio.click();onSkip?.()}} style={{fontSize:7,padding:"6px 10px"}}>SKP</button>
+    </div>
+  </div>;
+};
+
+const HomeScreen=({appData,onStart,audio})=>{
+  const total=appData.workoutCount||0,nextIdx=total%4,nextDay=DAY_ORDER[nextIdx],day=PROGRAM[nextDay];
+  return<div className="slide-in" style={{padding:"0 16px 100px"}}>
+    <div style={{textAlign:"center",padding:"30px 0 20px"}}>
+      <div className="glitch-text" style={{fontSize:11,color:"#ff2d78",letterSpacing:2,marginBottom:6}}>GAINZ MACHINE</div>
+      <div className="neon-flicker" style={{fontSize:18,color:"#e8ff3c",letterSpacing:3,textShadow:"0 0 20px #e8ff3c,0 0 40px rgba(232,255,60,.3)"}}>3000</div>
+      <div style={{fontSize:7,color:"#b44fff",marginTop:6,letterSpacing:2}}>OUTRUN EDITION v1.0</div>
+    </div>
+    <div style={{display:"flex",justifyContent:"center",gap:24,marginBottom:20}}>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}><Guy/><div style={{fontSize:6,color:"#888"}}>MAX</div></div>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}><Girl/><div style={{fontSize:6,color:"#888"}}>JESS</div></div>
+    </div>
+    <div className="card-retro" style={{padding:12,marginBottom:16,display:"flex",justifyContent:"space-around"}}>
+      {[{l:"WORKOUTS",v:total},{l:"WEEK",v:Math.floor(total/4)+1},{l:"BODY FAT",v:"19.6%"}].map(s=>(
+        <div key={s.l} style={{textAlign:"center"}}>
+          <div style={{fontSize:16,color:"#e8ff3c",textShadow:"0 0 10px rgba(232,255,60,.5)"}}>{s.v}</div>
+          <div style={{fontSize:6,color:"#444",marginTop:4}}>{s.l}</div>
+        </div>
+      ))}
+    </div>
+    <div className="card-retro" style={{padding:16,marginBottom:16,borderColor:"#ff2d78",boxShadow:"0 0 20px rgba(255,45,120,.2)"}}>
+      <div style={{fontSize:7,color:"#ff2d78",marginBottom:10,letterSpacing:2}}>NEXT MISSION</div>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
+        <div style={{fontSize:28}}>{day.emoji}</div>
+        <div><div style={{fontSize:13,color:"#fff",marginBottom:4}}>{day.label}</div><div style={{fontSize:7,color:"#b44fff"}}>{day.description}</div></div>
+      </div>
+      <div style={{fontSize:7,color:"#444",marginBottom:12}}>{day.exercises.length} EXERCISES • {day.exercises.reduce((a,e)=>a+e.sets,0)} SETS TOTAL</div>
+      <button className="btn-retro btn-primary" style={{width:"100%",fontSize:10}} onClick={()=>{audio.startJingle();onStart(nextDay)}}>▶ INSERT COIN TO START</button>
+    </div>
+    <div className="card-retro" style={{padding:12,marginBottom:16}}>
+      <div style={{fontSize:7,color:"#00e5ff",marginBottom:10,letterSpacing:2}}>WEEK SCHEDULE</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+        {DAY_ORDER.map((d,i)=>{const done=i<nextIdx,cur=i===nextIdx;return(
+          <div key={d} style={{padding:8,border:`2px solid ${cur?"#ff2d78":done?"#1a1a2e":"#222"}`,background:done?"#050010":"transparent",opacity:done?.4:1}}>
+            <div style={{fontSize:7,color:cur?"#ff2d78":done?"#333":"#888"}}>{cur?"▶ ":done?"✓ ":"  "}{PROGRAM[d].label}</div>
+            <div style={{fontSize:6,color:"#444",marginTop:3}}>{PROGRAM[d].description}</div>
+          </div>
+        );})}
+      </div>
+    </div>
+    <div style={{fontSize:7,color:"#333",textAlign:"center",lineHeight:2,padding:"0 8px"}}>★ DOUBLE PROGRESSION: HIT TOP OF REP RANGE ON ALL SETS → ADD WEIGHT NEXT TIME ★</div>
+  </div>;
+};
+
+const WorkoutScreen=({dayKey,appData,onComplete,onBack,audio})=>{
+  const day=PROGRAM[dayKey];
+  const [exIdx,setExIdx]=useState(0);
+  const [setIdx,setSetIdx]=useState(0);
+  const [timerKey,setTimerKey]=useState(0);
+  const [showTimer,setShowTimer]=useState(false);
+  const [sets,setSets]=useState(()=>day.exercises.map(ex=>{
+    const k=`${dayKey}__${ex.id}`,logs=appData.logs?.[k],prev=logs?.length?logs[logs.length-1]:null;
+    return Array.from({length:ex.sets},()=>({weight:prev?.weight||0,reps:prev?.reps||8,done:false}));
+  }));
+  const ex=day.exercises[exIdx];
+  const total=day.exercises.reduce((a,e)=>a+e.sets,0);
+  const done=sets.reduce((a,e)=>a+e.filter(s=>s.done).length,0);
+  const upd=(ei,si,f,v)=>setSets(p=>{const n=p.map(e=>[...e]);n[ei][si]={...n[ei][si],[f]:v};return n});
+  const markDone=(ei,si)=>{
+    audio.success();upd(ei,si,"done",true);setShowTimer(true);setTimerKey(k=>k+1);
+    if(si<day.exercises[ei].sets-1)setSetIdx(si+1);
+    else if(ei<day.exercises.length-1)setTimeout(()=>{setExIdx(ei+1);setSetIdx(0)},100);
+  };
+  const complete=()=>{
+    audio.success();
+    const newLogs={...appData.logs};
+    day.exercises.forEach((ex,i)=>{
+      const k=`${dayKey}__${ex.id}`,best=sets[i].filter(s=>s.done).sort((a,b)=>b.weight-a.weight)[0];
+      if(best){if(!newLogs[k])newLogs[k]=[];newLogs[k].push({date:Date.now(),weight:best.weight,reps:best.reps});if(newLogs[k].length>20)newLogs[k]=newLogs[k].slice(-20);}
+    });
+    const nd={...appData,logs:newLogs,workoutCount:(appData.workoutCount||0)+1};
+    saveData(nd);onComplete(nd);
+  };
+  const restSecs=ex.type==="compound"?day.restCompound:day.restAccessory;
+  return<div className="slide-in" style={{padding:"0 16px 120px"}}>
+    <div style={{display:"flex",alignItems:"center",gap:12,padding:"16px 0 12px"}}>
+      <button className="btn-retro btn-ghost" onClick={onBack} style={{fontSize:7,padding:"6px 10px"}}>◀</button>
+      <div><div style={{fontSize:10,color:"#ff2d78"}}>{day.label} {day.emoji}</div><div style={{fontSize:6,color:"#444",marginTop:2}}>{day.description}</div></div>
+    </div>
+    <div style={{marginBottom:12}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+        <div style={{fontSize:7,color:"#b44fff"}}>PROGRESS</div>
+        <div style={{fontSize:7,color:"#b44fff"}}>{done}/{total} SETS</div>
+      </div>
+      <div className="progress-bar-retro"><div className="progress-bar-fill" style={{width:`${(done/total)*100}%`}}/></div>
+    </div>
+    <div style={{display:"flex",overflowX:"auto",marginBottom:12,borderBottom:"2px solid #1a1a1a"}}>
+      {day.exercises.map((e,i)=>{const allDone=sets[i].every(s=>s.done);return(
+        <button key={i} onClick={()=>{setExIdx(i);setSetIdx(0);audio.click()}} style={{background:"transparent",border:"none",padding:"8px 10px",fontSize:7,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"'Press Start 2P',monospace",color:i===exIdx?"#ff2d78":allDone?"#1a6a1a":"#444",borderBottom:`3px solid ${i===exIdx?"#ff2d78":"transparent"}`}}>{allDone?"✓":`${i+1}`}</button>
+      );})}
+    </div>
+    <div className="card-retro" style={{padding:16,marginBottom:12,borderColor:"#b44fff"}}>
+      <div style={{fontSize:7,color:"#b44fff",marginBottom:8}}>EXERCISE {exIdx+1}/{day.exercises.length} • {ex.type.toUpperCase()}</div>
+      <div style={{fontSize:11,color:"#fff",marginBottom:6,lineHeight:1.6}}>{ex.name}</div>
+      <div style={{fontSize:7,color:"#00e5ff",marginBottom:4}}>TARGET: {ex.repRange} REPS</div>
+      <div style={{fontSize:7,color:"#444",lineHeight:1.8}}>{ex.notes}</div>
+    </div>
+    <div className="card-retro" style={{padding:12,marginBottom:12}}>
+      <div style={{fontSize:7,color:"#e8ff3c",marginBottom:10}}>SETS</div>
+      <div style={{display:"grid",gridTemplateColumns:"24px 1fr 1fr 44px",gap:4,marginBottom:8}}>
+        <div style={{fontSize:6,color:"#333"}}>#</div>
+        <div style={{fontSize:6,color:"#333",textAlign:"center"}}>WEIGHT lb</div>
+        <div style={{fontSize:6,color:"#333",textAlign:"center"}}>REPS</div>
+        <div style={{fontSize:6,color:"#333",textAlign:"center"}}>GO</div>
+      </div>
+      {sets[exIdx].map((s,si)=>(
+        <div key={si} style={{display:"grid",gridTemplateColumns:"24px 1fr 1fr 44px",gap:4,marginBottom:8,alignItems:"center",opacity:s.done?.4:1,borderLeft:`3px solid ${si===setIdx&&!s.done?"#ff2d78":"transparent"}`,paddingLeft:4}}>
+          <div style={{fontSize:9,color:s.done?"#1a6a1a":"#444"}}>{s.done?"✓":si+1}</div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:3}}>
+            <button className="btn-retro btn-ghost" disabled={s.done} onClick={()=>upd(exIdx,si,"weight",Math.max(0,(s.weight||0)-5))} style={{fontSize:10,padding:"4px 5px",opacity:s.done?.3:1}}>-</button>
+            <input className="input-retro" type="number" value={s.weight} disabled={s.done} onChange={e=>upd(exIdx,si,"weight",parseFloat(e.target.value)||0)} style={{width:50,fontSize:11}}/>
+            <button className="btn-retro btn-ghost" disabled={s.done} onClick={()=>upd(exIdx,si,"weight",(s.weight||0)+5)} style={{fontSize:10,padding:"4px 5px",opacity:s.done?.3:1}}>+</button>
+          </div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:3}}>
+            <button className="btn-retro btn-ghost" disabled={s.done} onClick={()=>upd(exIdx,si,"reps",Math.max(1,(s.reps||1)-1))} style={{fontSize:10,padding:"4px 5px",opacity:s.done?.3:1}}>-</button>
+            <input className="input-retro" type="number" value={s.reps} disabled={s.done} onChange={e=>upd(exIdx,si,"reps",parseInt(e.target.value)||1)} style={{width:44,fontSize:11}}/>
+            <button className="btn-retro btn-ghost" disabled={s.done} onClick={()=>upd(exIdx,si,"reps",(s.reps||1)+1)} style={{fontSize:10,padding:"4px 5px",opacity:s.done?.3:1}}>+</button>
+          </div>
+          <button className={`btn-retro ${s.done?"btn-ghost":"btn-primary"}`} disabled={s.done} onClick={()=>markDone(exIdx,si)} style={{fontSize:9,padding:"6px 4px"}}>{s.done?"✓":"GO"}</button>
+        </div>
+      ))}
+    </div>
+    {showTimer&&<Timer key={timerKey} seconds={restSecs} audio={audio} onDone={()=>{}} onSkip={()=>setShowTimer(false)}/>}
+    {done===total&&<button className="btn-retro btn-yellow" style={{width:"100%",fontSize:10,marginTop:8}} onClick={complete}>🏆 MISSION COMPLETE!</button>}
+  </div>;
+};
+
+const ProgressScreen=({appData,audio})=>{
+  const [sel,setSel]=useState("UPPER-A");
+  const day=PROGRAM[sel];
+  return<div className="slide-in" style={{padding:"0 16px 100px"}}>
+    <div style={{fontSize:10,color:"#00e5ff",padding:"16px 0 14px",textShadow:"0 0 15px #00e5ff"}}>POWER LEVEL STATS</div>
+    <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
+      {DAY_ORDER.map(d=><button key={d} className={`btn-retro ${sel===d?"btn-cyan":"btn-ghost"}`} style={{fontSize:6,padding:"6px 8px"}} onClick={()=>{setSel(d);audio.click()}}>{PROGRAM[d].label}</button>)}
+    </div>
+    {day.exercises.map(ex=>{
+      const k=`${sel}__${ex.id}`,logs=appData.logs?.[k]||[],last=logs[logs.length-1];
+      return<div key={ex.id} className="card-retro" style={{padding:12,marginBottom:10}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+          <div style={{fontSize:8,color:"#fff",flex:1,lineHeight:1.6}}>{ex.name}</div>
+          {last&&<div style={{textAlign:"right"}}><div style={{fontSize:11,color:"#e8ff3c"}}>{last.weight}lb</div><div style={{fontSize:7,color:"#444"}}>x{last.reps}</div></div>}
+        </div>
+        <PixelChart data={logs} color={ex.type==="compound"?"#ff2d78":"#00e5ff"}/>
+        {!logs.length&&<div style={{fontSize:7,color:"#333",textAlign:"center",padding:8}}><span className="blink">_</span> NO DATA YET</div>}
+        {logs.length>0&&<div style={{fontSize:6,color:"#333",marginTop:6}}>{logs.length} SESSION{logs.length>1?"S":""} LOGGED</div>}
+      </div>;
+    })}
+  </div>;
+};
+
+const Nav=({active,onNav})=><div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:100,background:"rgba(10,0,20,.97)",borderTop:"2px solid #ff2d78",display:"flex",boxShadow:"0 -4px 20px rgba(255,45,120,.3)"}}>
+  {[{id:"home",label:"HOME",icon:"🕹️"},{id:"progress",label:"STATS",icon:"📊"}].map(t=>(
+    <button key={t.id} onClick={()=>onNav(t.id)} style={{flex:1,background:"transparent",border:"none",cursor:"pointer",padding:"14px 8px",fontFamily:"'Press Start 2P',monospace",borderTop:`3px solid ${active===t.id?"#ff2d78":"transparent"}`}}>
+      <div style={{fontSize:18,marginBottom:4}}>{t.icon}</div>
+      <div style={{fontSize:6,color:active===t.id?"#ff2d78":"#444"}}>{t.label}</div>
+    </button>
+  ))}
+</div>;
+
+function App(){
+  const [view,setView]=useState("home");
+  const [activeDay,setActiveDay]=useState(null);
+  const [appData,setAppData]=useState(loadData);
+  const audio=useAudio();
+  const startWorkout=d=>{setActiveDay(d);setView("workout")};
+  const completeWorkout=nd=>{setAppData(nd);setView("home");setActiveDay(null)};
+  return<div style={{minHeight:"100vh",position:"relative",maxWidth:480,margin:"0 auto"}}>
+    <BG/>
+    <Scanlines/>
+    <div style={{position:"relative",zIndex:10}}>
+      {view==="home"&&<HomeScreen appData={appData} onStart={startWorkout} audio={audio}/>}
+      {view==="workout"&&activeDay&&<WorkoutScreen dayKey={activeDay} appData={appData} onComplete={completeWorkout} onBack={()=>setView("home")} audio={audio}/>}
+      {view==="progress"&&<ProgressScreen appData={appData} audio={audio}/>}
+    </div>
+    {view!=="workout"&&<Nav active={view} onNav={setView}/>}
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
