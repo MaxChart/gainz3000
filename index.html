@@ -93,42 +93,11 @@ const STORAGE_KEY="gainzmachine3000_v1";
 const loadData=()=>{try{const r=localStorage.getItem(STORAGE_KEY);return r?JSON.parse(r):{logs:{},workoutCount:0}}catch{return{logs:{},workoutCount:0}}};
 const saveData=(d)=>{try{localStorage.setItem(STORAGE_KEY,JSON.stringify(d))}catch{}};
 
-// Global shared AudioContext - unlocked on first user gesture
-let _sharedCtx = null;
-const getSharedCtx = async () => {
-  if (!_sharedCtx) {
-    _sharedCtx = new (window.AudioContext || window.webkitAudioContext)();
-  }
-  if (_sharedCtx.state !== "running") {
-    await _sharedCtx.resume();
-    // iOS silent buffer unlock
-    const buf = _sharedCtx.createBuffer(1, 1, 22050);
-    const src = _sharedCtx.createBufferSource();
-    src.buffer = buf; src.connect(_sharedCtx.destination); src.start(0);
-  }
-  return _sharedCtx;
-};
-
-const playNote = async (freq, dur, type="square", vol=0.12, detune=0) => {
-  try {
-    const c = await getSharedCtx();
-    const o = c.createOscillator(), g = c.createGain();
-    o.connect(g); g.connect(c.destination);
-    o.type = type; o.frequency.value = freq;
-    if (detune) o.detune.value = detune;
-    const now = c.currentTime;
-    g.gain.setValueAtTime(0, now);
-    g.gain.linearRampToValueAtTime(vol, now + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.001, now + dur);
-    o.start(now); o.stop(now + dur + 0.05);
-  } catch {}
-};
-
 const useAudio=()=>({
-  success:()=>[523,659,784,1047].forEach((f,i)=>setTimeout(()=>playNote(f,.15),i*80)),
-  timerDone:()=>[440,554,659,880].forEach((f,i)=>setTimeout(()=>playNote(f,.2,"square",.2),i*100)),
-  startJingle:()=>[262,294,330,392,523,392,440,523].forEach((f,i)=>setTimeout(()=>playNote(f,.18,"square",.12),i*120)),
-  click:()=>playNote(220,.05,"square",.08),
+  success:()=>{},
+  timerDone:()=>{},
+  startJingle:()=>{},
+  click:()=>{},
 });
 
 
@@ -402,137 +371,31 @@ const Nav=({active,onNav})=><div style={{position:"fixed",bottom:0,left:0,right:
   ))}
 </div>;
 
-// ─── MUSIC ENGINE ─────────────────────────────────────────
+// ─── MUSIC ENGINE (HTML5 Audio) ──────────────────────────
 function createMusicEngine() {
+  let audio = null;
   let playing = false;
-  let loopTimeout = null;
-  let ctx = null;
 
-  const unlock = async () => {
-    return await getSharedCtx();
-  };
-
-  const note = (c, freq, start, dur, type="square", vol=0.1, detune=0) => {
-    try {
-      const o = c.createOscillator(), g = c.createGain();
-      o.connect(g); g.connect(c.destination);
-      o.type = type; o.frequency.value = freq;
-      if (detune) o.detune.value = detune;
-      g.gain.setValueAtTime(0, start);
-      g.gain.linearRampToValueAtTime(vol, start + 0.008);
-      g.gain.exponentialRampToValueAtTime(0.001, start + dur);
-      o.start(start); o.stop(start + dur + 0.05);
-    } catch {}
-  };
-
-  const kick = (c, t) => {
-    try {
-      const o = c.createOscillator(), g = c.createGain();
-      o.connect(g); g.connect(c.destination);
-      o.type = "sine";
-      o.frequency.setValueAtTime(200, t);
-      o.frequency.exponentialRampToValueAtTime(38, t + 0.12);
-      g.gain.setValueAtTime(0.6, t);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
-      o.start(t); o.stop(t + 0.2);
-    } catch {}
-  };
-
-  const snare = (c, t) => {
-    try {
-      const buf = c.createBuffer(1, c.sampleRate * 0.12, c.sampleRate);
-      const d = buf.getChannelData(0);
-      for (let i = 0; i < d.length; i++)
-        d[i] = (Math.random()*2-1) * Math.pow(1 - i/d.length, 1.5);
-      const src = c.createBufferSource(), filt = c.createBiquadFilter(), g = c.createGain();
-      filt.type = "bandpass"; filt.frequency.value = 3000; filt.Q.value = 0.7;
-      src.buffer = buf; src.connect(filt); filt.connect(g); g.connect(c.destination);
-      g.gain.setValueAtTime(0.38, t);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
-      src.start(t); src.stop(t + 0.14);
-    } catch {}
-  };
-
-  const hihat = (c, t, vol=0.07) => {
-    try {
-      const buf = c.createBuffer(1, c.sampleRate * 0.03, c.sampleRate);
-      const d = buf.getChannelData(0);
-      for (let i = 0; i < d.length; i++)
-        d[i] = (Math.random()*2-1) * Math.pow(1 - i/d.length, 4);
-      const src = c.createBufferSource(), filt = c.createBiquadFilter(), g = c.createGain();
-      filt.type = "highpass"; filt.frequency.value = 10000;
-      src.buffer = buf; src.connect(filt); filt.connect(g); g.connect(c.destination);
-      g.gain.setValueAtTime(vol, t);
-      src.start(t); src.stop(t + 0.04);
-    } catch {}
-  };
-
-  const BPM = 138;
-  const B = 60 / BPM;
-
-  const scheduleLoop = (c, t0) => {
-    const horn = [
-      [523,0,0.3],[523,0.5,0.3],[622,1,0.5],
-      [523,2,0.3],[523,2.5,0.3],[466,3,0.3],[523,3.5,0.3],
-      [523,4,0.3],[523,4.5,0.3],[622,5,0.5],
-      [523,6,0.3],[622,6.5,0.3],[698,7,0.8],
-      [523,8,0.3],[523,8.5,0.3],[622,9,0.5],
-      [523,10,0.3],[523,10.5,0.3],[466,11,0.3],[523,11.5,0.3],
-      [698,12,0.4],[622,12.5,0.4],[523,13,0.4],[466,13.5,0.4],
-      [415,14,0.4],[466,14.5,0.4],[523,15,0.8],
-    ];
-    horn.forEach(([freq,beat,dur]) => {
-      const t = t0 + beat*B;
-      note(c,freq,t,dur*B*0.85,"sawtooth",0.08);
-      note(c,freq,t,dur*B*0.85,"sawtooth",0.05,15);
-      note(c,freq,t,dur*B*0.85,"sawtooth",0.05,-15);
-      note(c,freq*2,t,dur*B*0.6,"square",0.025);
-    });
-    const bassPattern = [
-      [175,0,0.4],[175,0.5,0.2],[175,0.75,0.2],
-      [175,1,0.4],[196,1.5,0.3],[175,1.75,0.2],
-      [175,2,0.4],[175,2.5,0.2],[175,2.75,0.2],
-      [175,3,0.4],[208,3.5,0.3],[196,3.75,0.2],
-    ];
-    for (let rep=0; rep<4; rep++) {
-      bassPattern.forEach(([freq,beat,dur]) => {
-        const t = t0+(rep*4+beat)*B;
-        note(c,freq,t,dur*B*0.8,"triangle",0.25);
-        note(c,freq,t,dur*B*0.4,"sawtooth",0.08);
-      });
+  const getAudio = () => {
+    if (!audio) {
+      audio = new Audio("music.mp3");
+      audio.loop = true;
+      audio.volume = 0.7;
     }
-    const pads = [
-      [[175,208,262],0,3.9],[[196,233,311],4,3.9],
-      [[175,208,262],8,3.9],[[208,262,311],12,3.9],
-    ];
-    pads.forEach(([freqs,beat,dur]) => {
-      const t = t0+beat*B;
-      freqs.forEach(f => note(c,f,t,dur*B*0.95,"sawtooth",0.018));
-    });
-    const totalBeats = 16;
-    for (let i=0; i<totalBeats; i++) {
-      const t = t0+i*B;
-      kick(c,t);
-      if (i%2===1) snare(c,t);
-      hihat(c,t); hihat(c,t+B*0.5,0.05);
-    }
-    [0.5,1.5,2.5,3.5,4.5,5.5,6.5,7.5,8.5,9.5,10.5,11.5,12.5,13.5,14.5,15.5].forEach(b => kick(c,t0+b*B));
-    loopTimeout = setTimeout(() => {
-      if (playing) getSharedCtx().then(c => scheduleLoop(c, t0 + totalBeats*B));
-    }, totalBeats*B*1000 - 150);
+    return audio;
   };
 
   return {
     async toggle() {
       if (playing) {
         playing = false;
-        clearTimeout(loopTimeout);
+        getAudio().pause();
         return false;
       } else {
         playing = true;
         try {
-          const c = await unlock();
-          if (playing) scheduleLoop(c, c.currentTime + 0.1);
+          getAudio().currentTime = getAudio().currentTime || 0;
+          await getAudio().play();
         } catch(e) {
           playing = false;
           return false;
