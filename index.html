@@ -184,99 +184,199 @@ const BG=()=>{
 
 const Scanlines=()=><div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:9999,background:"repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.08) 2px,rgba(0,0,0,.08) 4px)"}}/>;
 
-const Timer=({seconds,onDone,onSkip,audio})=>{
-  const [rem,setRem]=useState(seconds);
-  const [active,setActive]=useState(false);
-  const ref=useRef(null);
-  useEffect(()=>{setRem(seconds);setActive(false);clearInterval(ref.current)},[seconds]);
-  const start=()=>{audio.click();setActive(true);ref.current=setInterval(()=>setRem(p=>{if(p<=1){clearInterval(ref.current);setActive(false);audio.timerDone();if(navigator.vibrate)navigator.vibrate([200,100,200]);onDone?.();return 0}return p-1}),1000)};
-  const pause=()=>{setActive(false);clearInterval(ref.current);audio.click()};
-  const reset=()=>{setActive(false);clearInterval(ref.current);setRem(seconds);audio.click()};
-  const pct=Math.round(((seconds-rem)/seconds)*10)*10;
-  const mins=Math.floor(rem/60),secs=rem%60,done=rem===0;
+// ─── EXERCISE NOTES (rotating per set) ───────────────────
+const EX_NOTES = {
+  swiss_press: ["Neutral grip — wrist-safe","Tuck elbows 45°, not flared","Control the descent, 2 sec down","Full lockout at top"],
+  incline_db: ["PowerBlocks, controlled descent","Slight arch, chest up","Squeeze pecs at top","Don't bounce at bottom"],
+  cable_row: ["Full stretch forward first","Drive elbows back, not up","Chest stays on pad","Squeeze shoulder blades together"],
+  lat_pull: ["Depress scapula before pulling","Pull to upper chest, not neck","Lean back slightly","Full stretch at top"],
+  cable_fly: ["Low to high, squeeze hard","Arms slightly bent, locked angle","Think hugging a barrel","Feel the stretch at the bottom"],
+  face_pull: ["External rotation — shoulder health","Pull to forehead, not chin","Elbows high and wide","Slow and controlled always"],
+  hammer_curl: ["Neutral grip, no wrist torque","Keep elbows pinned to sides","Full extension at bottom","Don't swing the body"],
+  belt_squat: ["No spinal load — go deep","Chest up, knees track toes","Drive through the whole foot","Pause at bottom for 1 sec"],
+  leg_press: ["Shoulder width, full ROM","Don't lock knees at top","Controlled descent always","Feet high = more hamstring"],
+  trap_rdl: ["Hip hinge, soft knees","Push hips back, not down","Bar stays close to legs","Feel the hamstring stretch"],
+  leg_curl: ["Slow eccentric, 3 sec down","Full extension at start","Don't let hips rise","Squeeze at top of curl"],
+  leg_ext: ["Full extension, squeeze top","Control the descent","No bouncing at bottom","Toes slightly inward"],
+  calf_raise: ["Full stretch at bottom","Pause at top 1 sec","Single leg if too easy","Drive through big toe"],
+  trap_row: ["Neutral grip, elbows back","Initiate with lats, not arms","Full stretch at bottom","Squeeze at top"],
+  safety_ohp: ["Strict, no lower back arch","Core braced tight","Full lockout overhead","Elbows slightly forward"],
+  cable_pullover: ["Lat stretch, long ROM","Arms straight, slight bend","Initiate with lats","Don't use momentum"],
+  db_row: ["Full stretch at bottom","Drive elbow to ceiling","Don't rotate the torso","Brace on bench firmly"],
+  rear_delt: ["Horizontal abduction","Slight bend in elbows","Squeeze at top","Light weight, high reps"],
+  cable_curl: ["Wrist neutral, no swing","Full extension at bottom","Squeeze at top","Elbows stay pinned"],
+  tricep_push: ["Rope or straight bar","Elbows stay pinned to sides","Full extension at bottom","Squeeze triceps hard"],
+  trap_dead: ["High handles if back sensitive","Hinge, don't squat","Bar stays close to body","Drive floor away from you"],
+  hack_squat: ["Deep ROM, controlled","Shoulder width stance","Don't let knees cave","Full extension at top"],
+  db_lunge: ["Upright torso, PowerBlocks","Step long enough to get 90°","Drive through front heel","Keep core tight"],
+  nordic: ["Eccentric focus — 4 sec down","Use hands to push back up","Hamstrings will burn","Progress slowly"],
+  hip_thrust: ["Bench + DB on hips","Drive through heels","Squeeze glutes at top","Full ROM, touch floor"],
+  calf_seated: ["Soleus focus","Full stretch at bottom","Slow and controlled","Heels drop all the way down"],
+};
+
+// ─── EXERCISE SUBSTITUTIONS ───────────────────────────────
+const SUBSTITUTIONS = {
+  swiss_press: [{id:"incline_db",name:"Incline DB Press"},{id:"cable_fly",name:"Cable Chest Fly (high weight)"}],
+  incline_db: [{id:"swiss_press",name:"Swiss Bar Bench Press"},{id:"cable_fly",name:"Cable Fly"}],
+  cable_row: [{id:"db_row",name:"1-Arm DB Row"},{id:"trap_row",name:"Trap Bar Bent Row"}],
+  lat_pull: [{id:"cable_pullover",name:"Cable Straight-Arm Pullover"},{id:"db_row",name:"1-Arm DB Row"}],
+  cable_fly: [{id:"swiss_press",name:"Swiss Bar Press (lighter)"},{id:"incline_db",name:"Incline DB Press"}],
+  face_pull: [{id:"rear_delt",name:"Rear Delt Cable Fly"},{id:"hammer_curl",name:"Hammer Curl (superset)"}],
+  hammer_curl: [{id:"cable_curl",name:"Cable Curl"},{id:"db_row",name:"1-Arm DB Row (supinate)"}],
+  belt_squat: [{id:"leg_press",name:"Leg Press"},{id:"hack_squat",name:"Hack Squat"}],
+  leg_press: [{id:"belt_squat",name:"Belt Squat"},{id:"hack_squat",name:"Hack Squat"}],
+  trap_rdl: [{id:"leg_curl",name:"Leg Curl"},{id:"hip_thrust",name:"Hip Thrust"}],
+  leg_curl: [{id:"trap_rdl",name:"Trap Bar RDL"},{id:"nordic",name:"Nordic Curl"}],
+  leg_ext: [{id:"belt_squat",name:"Belt Squat (light)"},{id:"leg_press",name:"Leg Press (light)"}],
+  calf_raise: [{id:"calf_seated",name:"Seated Calf Raise"}],
+  trap_row: [{id:"cable_row",name:"Cable Seated Row"},{id:"db_row",name:"1-Arm DB Row"}],
+  safety_ohp: [{id:"cable_fly",name:"Cable Lateral Raise"},{id:"rear_delt",name:"Rear Delt Fly"}],
+  cable_pullover: [{id:"lat_pull",name:"Lat Pulldown"},{id:"cable_row",name:"Cable Row"}],
+  db_row: [{id:"cable_row",name:"Cable Seated Row"},{id:"trap_row",name:"Trap Bar Row"}],
+  rear_delt: [{id:"face_pull",name:"Face Pull"},{id:"cable_row",name:"Cable Row (wide grip)"}],
+  cable_curl: [{id:"hammer_curl",name:"Hammer Curl"},{id:"db_row",name:"Supinated DB Row"}],
+  tricep_push: [{id:"cable_fly",name:"Cable Overhead Tricep"},{id:"swiss_press",name:"Close Grip Swiss Press"}],
+  trap_dead: [{id:"belt_squat",name:"Belt Squat"},{id:"hack_squat",name:"Hack Squat"}],
+  hack_squat: [{id:"leg_press",name:"Leg Press"},{id:"belt_squat",name:"Belt Squat"}],
+  db_lunge: [{id:"leg_press",name:"Single Leg Press"},{id:"belt_squat",name:"Belt Squat"}],
+  nordic: [{id:"leg_curl",name:"Leg Curl"},{id:"trap_rdl",name:"Trap Bar RDL"}],
+  hip_thrust: [{id:"trap_rdl",name:"Trap Bar RDL"},{id:"leg_curl",name:"Leg Curl"}],
+  calf_seated: [{id:"calf_raise",name:"Standing Calf Raise"}],
+};
+
+// ─── TIMER (persistent, background-aware) ─────────────────
+const PersistentTimer=({seconds,timerState,setTimerState,onDone,beepAudio})=>{
+  const [display,setDisplay]=useState(seconds);
+  const rafRef=useRef(null);
+
+  useEffect(()=>{
+    if(!timerState.running) return;
+    const tick=()=>{
+      const elapsed=(Date.now()-timerState.startedAt)/1000;
+      const rem=Math.max(0, timerState.totalSeconds - elapsed);
+      setDisplay(Math.ceil(rem));
+      if(rem<=0){
+        setTimerState(s=>({...s,running:false}));
+        if(beepAudio) { try { beepAudio.currentTime=0; beepAudio.play(); } catch {} }
+        if(navigator.vibrate) navigator.vibrate([300,100,300]);
+        onDone?.();
+        return;
+      }
+      rafRef.current=requestAnimationFrame(tick);
+    };
+    rafRef.current=requestAnimationFrame(tick);
+    return()=>cancelAnimationFrame(rafRef.current);
+  },[timerState.running, timerState.startedAt]);
+
+  // On mount, sync display
+  useEffect(()=>{
+    if(!timerState.running){
+      const elapsed=(Date.now()-timerState.startedAt)/1000;
+      const rem=Math.max(0,timerState.totalSeconds-elapsed);
+      setDisplay(Math.ceil(rem));
+    }
+  },[]);
+
+  const start=()=>setTimerState(s=>({...s,running:true,startedAt:Date.now(),totalSeconds:display>0?display:seconds}));
+  const pause=()=>{
+    const elapsed=(Date.now()-timerState.startedAt)/1000;
+    const rem=Math.max(0,timerState.totalSeconds-elapsed);
+    setDisplay(Math.ceil(rem));
+    setTimerState(s=>({...s,running:false,totalSeconds:Math.ceil(rem)}));
+  };
+  const reset=()=>{setDisplay(seconds);setTimerState(s=>({...s,running:false,totalSeconds:seconds,startedAt:Date.now()}))};
+  const skip=()=>{setTimerState(s=>({...s,running:false}));onDone?.()};
+
+  const pct=Math.max(0,Math.min(100,((timerState.totalSeconds-display)/timerState.totalSeconds)*100));
+  const mins=Math.floor(display/60), secs=display%60, done=display<=0;
+
   return<div className="card-retro" style={{padding:16,margin:"12px 0"}}>
     <div style={{fontSize:7,color:"#b44fff",letterSpacing:2,marginBottom:10}}>// REST TIMER //</div>
     <div style={{display:"flex",alignItems:"center",gap:16}}>
-      <div style={{fontSize:28,color:done?"#e8ff3c":"#00e5ff",fontFamily:"'Press Start 2P',monospace",textShadow:done?"0 0 20px #e8ff3c":"0 0 20px #00e5ff",minWidth:80}}>{mins}:{secs.toString().padStart(2,"0")}</div>
+      <div style={{fontSize:28,color:done?"#e8ff3c":"#00e5ff",fontFamily:"'Press Start 2P',monospace",textShadow:done?"0 0 20px #e8ff3c":"0 0 20px #00e5ff",minWidth:80}}>
+        {mins}:{secs.toString().padStart(2,"0")}
+      </div>
       <div style={{flex:1}}>
         <div className="progress-bar-retro"><div className="progress-bar-fill" style={{width:`${pct}%`}}/></div>
-        <div style={{fontSize:7,color:"#444",marginTop:4}}>{seconds}s TOTAL</div>
+        <div style={{fontSize:7,color:"#444",marginTop:4}}>{timerState.totalSeconds}s TOTAL</div>
       </div>
     </div>
     <div style={{display:"flex",gap:8,marginTop:12}}>
       <button className="btn-retro btn-ghost" onClick={reset} style={{fontSize:7,padding:"6px 10px"}}>RST</button>
-      <button className={`btn-retro ${active?"btn-ghost":"btn-cyan"}`} onClick={active?pause:start} style={{fontSize:7,flex:1}}>{active?"⏸ PAUSE":done?"✓ DONE":rem===seconds?"▶ START":"▶ RESUME"}</button>
-      <button className="btn-retro btn-ghost" onClick={()=>{clearInterval(ref.current);audio.click();onSkip?.()}} style={{fontSize:7,padding:"6px 10px"}}>SKP</button>
+      <button className={`btn-retro ${timerState.running?"btn-ghost":"btn-cyan"}`} onClick={timerState.running?pause:start} style={{fontSize:7,flex:1}}>
+        {timerState.running?"⏸ PAUSE":done?"✓ DONE":timerState.totalSeconds<seconds?"▶ RESUME":"▶ START"}
+      </button>
+      <button className="btn-retro btn-ghost" onClick={skip} style={{fontSize:7,padding:"6px 10px"}}>SKP</button>
     </div>
   </div>;
 };
 
-const HomeScreen=({appData,onStart,audio,onToggleMusic,musicPlaying})=>{
-  const total=appData.workoutCount||0,nextIdx=total%4,nextDay=DAY_ORDER[nextIdx],day=PROGRAM[nextDay];
-  return<div className="slide-in" style={{padding:"0 16px 100px"}}>
-    <div style={{textAlign:"center",padding:"30px 0 20px"}}>
-      <div className="glitch-text" style={{fontSize:11,color:"#ff2d78",letterSpacing:2,marginBottom:6}}>GAINZ MACHINE</div>
-      <div className="neon-flicker" style={{fontSize:18,color:"#e8ff3c",letterSpacing:3,textShadow:"0 0 20px #e8ff3c,0 0 40px rgba(232,255,60,.3)"}}>3000</div>
-      <div style={{fontSize:7,color:"#b44fff",marginTop:6,letterSpacing:2}}>OUTRUN EDITION v1.0</div>
-    </div>
-    <div style={{display:"flex",justifyContent:"center",alignItems:"flex-end",gap:20,marginBottom:20}}>
-      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}><Guy/><div style={{fontSize:6,color:"#888"}}>MAX</div></div>
-      <Walkman playing={musicPlaying} onToggle={onToggleMusic}/>
-      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}><Girl/><div style={{fontSize:6,color:"#888"}}>JESS</div></div>
-    </div>
-    <div className="card-retro" style={{padding:12,marginBottom:16,display:"flex",justifyContent:"space-around"}}>
-      {[{l:"WORKOUTS",v:total},{l:"WEEK",v:Math.floor(total/4)+1},{l:"BODY FAT",v:"19.6%"}].map(s=>(
-        <div key={s.l} style={{textAlign:"center"}}>
-          <div style={{fontSize:16,color:"#e8ff3c",textShadow:"0 0 10px rgba(232,255,60,.5)"}}>{s.v}</div>
-          <div style={{fontSize:6,color:"#444",marginTop:4}}>{s.l}</div>
-        </div>
-      ))}
-    </div>
-    <div className="card-retro" style={{padding:16,marginBottom:16,borderColor:"#ff2d78",boxShadow:"0 0 20px rgba(255,45,120,.2)"}}>
-      <div style={{fontSize:7,color:"#ff2d78",marginBottom:10,letterSpacing:2}}>NEXT MISSION</div>
-      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
-        <div style={{fontSize:28}}>{day.emoji}</div>
-        <div><div style={{fontSize:13,color:"#fff",marginBottom:4}}>{day.label}</div><div style={{fontSize:7,color:"#b44fff"}}>{day.description}</div></div>
-      </div>
-      <div style={{fontSize:7,color:"#444",marginBottom:12}}>{day.exercises.length} EXERCISES • {day.exercises.reduce((a,e)=>a+e.sets,0)} SETS TOTAL</div>
-      <button className="btn-retro btn-primary" style={{width:"100%",fontSize:10}} onClick={()=>{audio.startJingle();onStart(nextDay)}}>▶ INSERT COIN TO START</button>
-    </div>
-    <div className="card-retro" style={{padding:12,marginBottom:16}}>
-      <div style={{fontSize:7,color:"#00e5ff",marginBottom:10,letterSpacing:2}}>WEEK SCHEDULE</div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-        {DAY_ORDER.map((d,i)=>{const done=i<nextIdx,cur=i===nextIdx;return(
-          <div key={d} style={{padding:8,border:`2px solid ${cur?"#ff2d78":done?"#1a1a2e":"#222"}`,background:done?"#050010":"transparent",opacity:done?.4:1}}>
-            <div style={{fontSize:7,color:cur?"#ff2d78":done?"#333":"#888"}}>{cur?"▶ ":done?"✓ ":"  "}{PROGRAM[d].label}</div>
-            <div style={{fontSize:6,color:"#444",marginTop:3}}>{PROGRAM[d].description}</div>
-          </div>
-        );})}
-      </div>
-    </div>
-    <div style={{fontSize:7,color:"#333",textAlign:"center",lineHeight:2,padding:"0 8px"}}>★ DOUBLE PROGRESSION: HIT TOP OF REP RANGE ON ALL SETS → ADD WEIGHT NEXT TIME ★</div>
-  </div>;
-};
-
-const WorkoutScreen=({dayKey,appData,onComplete,onBack,audio})=>{
+// ─── WORKOUT SCREEN ───────────────────────────────────────
+const WorkoutScreen=({dayKey,appData,onComplete,onBack,beepAudio})=>{
   const day=PROGRAM[dayKey];
   const [exIdx,setExIdx]=useState(0);
-  const [setIdx,setSetIdx]=useState(0);
-  const [timerKey,setTimerKey]=useState(0);
-  const [showTimer,setShowTimer]=useState(false);
   const [sets,setSets]=useState(()=>day.exercises.map(ex=>{
     const k=`${dayKey}__${ex.id}`,logs=appData.logs?.[k],prev=logs?.length?logs[logs.length-1]:null;
-    return Array.from({length:ex.sets},()=>({weight:prev?.weight||0,reps:prev?.reps||8,done:false}));
+    const repLow=parseInt((ex.repRange||"8").split("-")[0])||8;
+    return Array.from({length:ex.sets},()=>({weight:prev?.weight||0,reps:repLow,done:false}));
   }));
+  const [showSub,setShowSub]=useState(false);
+  const [sessionStart]=useState(()=>Date.now());
+  const [elapsed,setElapsed]=useState(0);
+  const [timerState,setTimerState]=useState({running:false,startedAt:0,totalSeconds:180});
+
+  // Session clock
+  useEffect(()=>{
+    const iv=setInterval(()=>setElapsed(Math.floor((Date.now()-sessionStart)/1000)),1000);
+    return()=>clearInterval(iv);
+  },[]);
+
   const ex=day.exercises[exIdx];
+  const restSecs=ex.type==="compound"?day.restCompound:day.restAccessory;
   const total=day.exercises.reduce((a,e)=>a+e.sets,0);
-  const done=sets.reduce((a,e)=>a+e.filter(s=>s.done).length,0);
+  const doneCount=sets.reduce((a,e)=>a+e.filter(s=>s.done).length,0);
+
+  // Rotating notes per set
+  const currentSetIdx=sets[exIdx].findIndex(s=>!s.done);
+  const notes=EX_NOTES[ex.id]||[ex.notes];
+  const currentNote=notes[(currentSetIdx<0?0:currentSetIdx)%notes.length];
+
   const upd=(ei,si,f,v)=>setSets(p=>{const n=p.map(e=>[...e]);n[ei][si]={...n[ei][si],[f]:v};return n});
+
+  // Auto-fill weight to all undone sets in same exercise
+  const updWeight=(ei,si,v)=>setSets(p=>{
+    const n=p.map(e=>[...e]);
+    n[ei]=n[ei].map((s,i)=>i>=si&&!s.done?{...s,weight:v}:s);
+    return n;
+  });
+
   const markDone=(ei,si)=>{
-    audio.success();upd(ei,si,"done",true);setShowTimer(true);setTimerKey(k=>k+1);
-    if(si<day.exercises[ei].sets-1)setSetIdx(si+1);
-    else if(ei<day.exercises.length-1)setTimeout(()=>{setExIdx(ei+1);setSetIdx(0)},100);
+    setSets(p=>{const n=p.map(e=>[...e]);n[ei][si]={...n[ei][si],done:true};return n});
+    // Auto-start timer
+    setTimerState({running:true,startedAt:Date.now(),totalSeconds:restSecs});
+    if(si<day.exercises[ei].sets-1){/* stay on same exercise */}
+    else if(ei<day.exercises.length-1){setTimeout(()=>{setExIdx(ei+1)},100);}
   };
+
+  const addSet=(ei)=>setSets(p=>{
+    const n=p.map(e=>[...e]);
+    const last=n[ei][n[ei].length-1];
+    n[ei].push({weight:last?.weight||0,reps:last?.reps||8,done:false});
+    return n;
+  });
+
+  const switchExercise=(newEx)=>{
+    const newSets=sets.map((s,i)=>{
+      if(i!==exIdx)return s;
+      return Array.from({length:day.exercises[exIdx].sets},()=>({weight:0,reps:parseInt((newEx.repRange||"8").split("-")[0])||8,done:false}));
+    });
+    // Patch day exercises temporarily
+    day.exercises[exIdx]={...day.exercises[exIdx],...newEx};
+    setSets(newSets);
+    setShowSub(false);
+  };
+
   const complete=()=>{
-    audio.success();
     const newLogs={...appData.logs};
     day.exercises.forEach((ex,i)=>{
       const k=`${dayKey}__${ex.id}`,best=sets[i].filter(s=>s.done).sort((a,b)=>b.weight-a.weight)[0];
@@ -285,30 +385,58 @@ const WorkoutScreen=({dayKey,appData,onComplete,onBack,audio})=>{
     const nd={...appData,logs:newLogs,workoutCount:(appData.workoutCount||0)+1};
     saveData(nd);onComplete(nd);
   };
-  const restSecs=ex.type==="compound"?day.restCompound:day.restAccessory;
+
+  const sessionMins=Math.floor(elapsed/60),sessionSecs=elapsed%60;
+  const subs=SUBSTITUTIONS[ex.id]||[];
+
   return<div className="slide-in" style={{padding:"0 16px 120px"}}>
-    <div style={{display:"flex",alignItems:"center",gap:12,padding:"16px 0 12px"}}>
-      <button className="btn-retro btn-ghost" onClick={onBack} style={{fontSize:7,padding:"6px 10px"}}>◀</button>
-      <div><div style={{fontSize:10,color:"#ff2d78"}}>{day.label} {day.emoji}</div><div style={{fontSize:6,color:"#444",marginTop:2}}>{day.description}</div></div>
+    {/* Header */}
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 0 12px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:12}}>
+        <button className="btn-retro btn-ghost" onClick={onBack} style={{fontSize:7,padding:"6px 10px"}}>◀</button>
+        <div><div style={{fontSize:10,color:"#ff2d78"}}>{day.label} {day.emoji}</div><div style={{fontSize:6,color:"#444",marginTop:2}}>{day.description}</div></div>
+      </div>
+      <div style={{textAlign:"right"}}>
+        <div style={{fontSize:11,color:"#e8ff3c",fontFamily:"'Press Start 2P',monospace"}}>{sessionMins}:{sessionSecs.toString().padStart(2,"0")}</div>
+        <div style={{fontSize:6,color:"#444",marginTop:2}}>SESSION</div>
+      </div>
     </div>
+
+    {/* Progress */}
     <div style={{marginBottom:12}}>
       <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
         <div style={{fontSize:7,color:"#b44fff"}}>PROGRESS</div>
-        <div style={{fontSize:7,color:"#b44fff"}}>{done}/{total} SETS</div>
+        <div style={{fontSize:7,color:"#b44fff"}}>{doneCount}/{total} SETS</div>
       </div>
-      <div className="progress-bar-retro"><div className="progress-bar-fill" style={{width:`${(done/total)*100}%`}}/></div>
+      <div className="progress-bar-retro"><div className="progress-bar-fill" style={{width:`${(doneCount/total)*100}%`}}/></div>
     </div>
+
+    {/* Exercise tabs */}
     <div style={{display:"flex",overflowX:"auto",marginBottom:12,borderBottom:"2px solid #1a1a1a"}}>
       {day.exercises.map((e,i)=>{const allDone=sets[i].every(s=>s.done);return(
-        <button key={i} onClick={()=>{setExIdx(i);setSetIdx(0);audio.click()}} style={{background:"transparent",border:"none",padding:"8px 10px",fontSize:7,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"'Press Start 2P',monospace",color:i===exIdx?"#ff2d78":allDone?"#1a6a1a":"#444",borderBottom:`3px solid ${i===exIdx?"#ff2d78":"transparent"}`}}>{allDone?"✓":`${i+1}`}</button>
+        <button key={i} onClick={()=>setExIdx(i)} style={{background:"transparent",border:"none",padding:"8px 10px",fontSize:7,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"'Press Start 2P',monospace",color:i===exIdx?"#ff2d78":allDone?"#1a6a1a":"#444",borderBottom:`3px solid ${i===exIdx?"#ff2d78":"transparent"}`}}>{allDone?"✓":`${i+1}`}</button>
       );})}
     </div>
+
+    {/* Current exercise */}
     <div className="card-retro" style={{padding:16,marginBottom:12,borderColor:"#b44fff"}}>
       <div style={{fontSize:7,color:"#b44fff",marginBottom:8}}>EXERCISE {exIdx+1}/{day.exercises.length} • {ex.type.toUpperCase()}</div>
       <div style={{fontSize:11,color:"#fff",marginBottom:6,lineHeight:1.6}}>{ex.name}</div>
-      <div style={{fontSize:7,color:"#00e5ff",marginBottom:4}}>TARGET: {ex.repRange} REPS</div>
-      <div style={{fontSize:7,color:"#444",lineHeight:1.8}}>{ex.notes}</div>
+      <div style={{fontSize:7,color:"#00e5ff",marginBottom:6}}>TARGET: {ex.repRange} REPS</div>
+      <div style={{fontSize:7,color:"#555",lineHeight:1.8,minHeight:16}}>{currentNote}</div>
+      {subs.length>0&&<button className="btn-retro btn-ghost" onClick={()=>setShowSub(!showSub)} style={{fontSize:6,padding:"5px 8px",marginTop:10}}>⇄ SWITCH EXERCISE</button>}
     </div>
+
+    {/* Substitution picker */}
+    {showSub&&subs.length>0&&<div className="card-retro" style={{padding:12,marginBottom:12,borderColor:"#e8ff3c"}}>
+      <div style={{fontSize:7,color:"#e8ff3c",marginBottom:10}}>SUBSTITUTE WITH:</div>
+      {subs.map(s=>(
+        <button key={s.id} className="btn-retro btn-ghost" onClick={()=>switchExercise(s)} style={{fontSize:7,display:"block",width:"100%",marginBottom:6,textAlign:"left"}}>{s.name}</button>
+      ))}
+      <button className="btn-retro btn-ghost" onClick={()=>setShowSub(false)} style={{fontSize:6,padding:"5px 8px",marginTop:4}}>✕ CANCEL</button>
+    </div>}
+
+    {/* Sets */}
     <div className="card-retro" style={{padding:12,marginBottom:12}}>
       <div style={{fontSize:7,color:"#e8ff3c",marginBottom:10}}>SETS</div>
       <div style={{display:"grid",gridTemplateColumns:"24px 1fr 1fr 44px",gap:4,marginBottom:8}}>
@@ -318,26 +446,43 @@ const WorkoutScreen=({dayKey,appData,onComplete,onBack,audio})=>{
         <div style={{fontSize:6,color:"#333",textAlign:"center"}}>GO</div>
       </div>
       {sets[exIdx].map((s,si)=>(
-        <div key={si} style={{display:"grid",gridTemplateColumns:"24px 1fr 1fr 44px",gap:4,marginBottom:8,alignItems:"center",opacity:s.done?.4:1,borderLeft:`3px solid ${si===setIdx&&!s.done?"#ff2d78":"transparent"}`,paddingLeft:4}}>
+        <div key={si} style={{display:"grid",gridTemplateColumns:"24px 1fr 1fr 44px",gap:4,marginBottom:8,alignItems:"center",opacity:s.done?.4:1,borderLeft:`3px solid ${!s.done&&sets[exIdx].findIndex(x=>!x.done)===si?"#ff2d78":"transparent"}`,paddingLeft:4}}>
           <div style={{fontSize:9,color:s.done?"#1a6a1a":"#444"}}>{s.done?"✓":si+1}</div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:3}}>
-            <button className="btn-retro btn-ghost" disabled={s.done} onClick={()=>upd(exIdx,si,"weight",Math.max(0,(s.weight||0)-5))} style={{fontSize:10,padding:"4px 5px",opacity:s.done?.3:1}}>-</button>
-            <input className="input-retro" type="number" value={s.weight} disabled={s.done} onChange={e=>upd(exIdx,si,"weight",parseFloat(e.target.value)||0)} style={{width:50,fontSize:11}}/>
-            <button className="btn-retro btn-ghost" disabled={s.done} onClick={()=>upd(exIdx,si,"weight",(s.weight||0)+5)} style={{fontSize:10,padding:"4px 5px",opacity:s.done?.3:1}}>+</button>
+            <button className="btn-retro btn-ghost" disabled={s.done} onMouseDown={e=>{e.preventDefault();updWeight(exIdx,si,Math.max(0,(s.weight||0)-5))}} style={{fontSize:10,padding:"4px 5px",opacity:s.done?.3:1}}>-</button>
+            <input className="input-retro" type="number" value={s.weight||""} disabled={s.done}
+              onFocus={e=>{e.target.select()}}
+              onChange={e=>{const v=parseFloat(e.target.value)||0;updWeight(exIdx,si,v)}}
+              style={{width:50,fontSize:11}}/>
+            <button className="btn-retro btn-ghost" disabled={s.done} onMouseDown={e=>{e.preventDefault();updWeight(exIdx,si,(s.weight||0)+5)}} style={{fontSize:10,padding:"4px 5px",opacity:s.done?.3:1}}>+</button>
           </div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:3}}>
-            <button className="btn-retro btn-ghost" disabled={s.done} onClick={()=>upd(exIdx,si,"reps",Math.max(1,(s.reps||1)-1))} style={{fontSize:10,padding:"4px 5px",opacity:s.done?.3:1}}>-</button>
-            <input className="input-retro" type="number" value={s.reps} disabled={s.done} onChange={e=>upd(exIdx,si,"reps",parseInt(e.target.value)||1)} style={{width:44,fontSize:11}}/>
-            <button className="btn-retro btn-ghost" disabled={s.done} onClick={()=>upd(exIdx,si,"reps",(s.reps||1)+1)} style={{fontSize:10,padding:"4px 5px",opacity:s.done?.3:1}}>+</button>
+            <button className="btn-retro btn-ghost" disabled={s.done} onMouseDown={e=>{e.preventDefault();upd(exIdx,si,"reps",Math.max(1,(s.reps||1)-1))}} style={{fontSize:10,padding:"4px 5px",opacity:s.done?.3:1}}>-</button>
+            <input className="input-retro" type="number" value={s.reps||""} disabled={s.done}
+              onFocus={e=>{e.target.select()}}
+              onChange={e=>upd(exIdx,si,"reps",parseInt(e.target.value)||1)}
+              style={{width:44,fontSize:11}}/>
+            <button className="btn-retro btn-ghost" disabled={s.done} onMouseDown={e=>{e.preventDefault();upd(exIdx,si,"reps",(s.reps||1)+1)}} style={{fontSize:10,padding:"4px 5px",opacity:s.done?.3:1}}>+</button>
           </div>
           <button className={`btn-retro ${s.done?"btn-ghost":"btn-primary"}`} disabled={s.done} onClick={()=>markDone(exIdx,si)} style={{fontSize:9,padding:"6px 4px"}}>{s.done?"✓":"GO"}</button>
         </div>
       ))}
+      <button className="btn-retro btn-ghost" onClick={()=>addSet(exIdx)} style={{fontSize:6,padding:"6px 10px",marginTop:4,width:"100%"}}>+ ADD SET</button>
     </div>
-    {showTimer&&<Timer key={timerKey} seconds={restSecs} audio={audio} onDone={()=>{}} onSkip={()=>setShowTimer(false)}/>}
-    {done===total&&<button className="btn-retro btn-yellow" style={{width:"100%",fontSize:10,marginTop:8}} onClick={complete}>🏆 MISSION COMPLETE!</button>}
+
+    {/* Persistent timer */}
+    <PersistentTimer
+      seconds={restSecs}
+      timerState={timerState}
+      setTimerState={setTimerState}
+      onDone={()=>{}}
+      beepAudio={beepAudio}
+    />
+
+    {doneCount===total&&<button className="btn-retro btn-yellow" style={{width:"100%",fontSize:10,marginTop:8}} onClick={complete}>🏆 MISSION COMPLETE!</button>}
   </div>;
 };
+
 
 const ProgressScreen=({appData,audio})=>{
   const [sel,setSel]=useState("UPPER-A");
@@ -414,8 +559,13 @@ function App(){
   const [appData,setAppData]=useState(loadData);
   const audio=useAudio();
   const musicRef=useRef(null);
+  const beepRef=useRef(null);
   const [musicPlaying,setMusicPlaying]=useState(false);
-  useEffect(()=>{ musicRef.current=createMusicEngine(); },[]);
+  useEffect(()=>{
+    musicRef.current=createMusicEngine();
+    beepRef.current=new Audio("beep.mp3");
+    beepRef.current.volume=0.8;
+  },[]);
   const toggleMusic=async()=>{
     if(!musicRef.current)return;
     const nowPlaying=await musicRef.current.toggle();
@@ -428,7 +578,7 @@ function App(){
     <Scanlines/>
     <div style={{position:"relative",zIndex:10}}>
       {view==="home"&&<HomeScreen appData={appData} onStart={startWorkout} audio={audio} onToggleMusic={toggleMusic} musicPlaying={musicPlaying}/>}
-      {view==="workout"&&activeDay&&<WorkoutScreen dayKey={activeDay} appData={appData} onComplete={completeWorkout} onBack={()=>setView("home")} audio={audio}/>}
+      {view==="workout"&&activeDay&&<WorkoutScreen dayKey={activeDay} appData={appData} onComplete={completeWorkout} onBack={()=>setView("home")} audio={audio} beepAudio={beepRef.current}/>}
       {view==="progress"&&<ProgressScreen appData={appData} audio={audio}/>}
     </div>
     {view!=="workout"&&<Nav active={view} onNav={setView}/>}
