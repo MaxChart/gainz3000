@@ -606,10 +606,8 @@ const WorkoutScreen=({dayKey,appData,onComplete,onBack,beepAudio})=>{
       if(allDone){
         const exDone=day.exercises[ei];
         const totalLifted=n[ei].reduce((acc,s)=>acc+(s.weight||0)*(s.reps||0),0);
-        setTimeout(()=>setCutscene({exName:exDone.name,totalLifted}),50);
-        setTimeout(()=>{
-          if(ei<day.exercises.length-1) setExIdx(ei+1);
-        },5200);
+        const nextIdx=ei<day.exercises.length-1?ei+1:null;
+        setTimeout(()=>setCutscene({exName:exDone.name,totalLifted,nextExIdx:nextIdx}),50);
       }
       return n;
     });
@@ -653,9 +651,8 @@ const WorkoutScreen=({dayKey,appData,onComplete,onBack,beepAudio})=>{
       mins:totalMins, secs:totalSecs,
       exercises:day.exercises.length,
       workoutCount:(nd.workoutCount||1),
+      _nd:nd,
     });
-    // Delay home nav
-    setTimeout(()=>onComplete(nd), 30000);
   };
 
   const sessionMins=Math.floor(elapsed/60),sessionSecs=elapsed%60;
@@ -753,8 +750,8 @@ const WorkoutScreen=({dayKey,appData,onComplete,onBack,beepAudio})=>{
 
     {doneCount===total&&<button className="btn-retro btn-yellow" style={{width:"100%",fontSize:10,marginTop:8}} onClick={complete}>🏆 MISSION COMPLETE!</button>}
   </div>
-  {cutscene&&<ExerciseCutscene exName={cutscene.exName} totalLifted={cutscene.totalLifted} onDone={()=>setCutscene(null)}/>}
-  {showMission&&<MissionComplete stats={showMission} onDone={()=>{setShowMission(false);}}/>};
+  {cutscene&&<ExerciseCutscene exName={cutscene.exName} totalLifted={cutscene.totalLifted} onDone={()=>{if(cutscene.nextExIdx!==null)setExIdx(cutscene.nextExIdx);setCutscene(null);}}/>}
+  {showMission&&<MissionComplete stats={showMission} onDone={()=>{setShowMission(false);onComplete(showMission._nd);}}/>}
 };
 
 
