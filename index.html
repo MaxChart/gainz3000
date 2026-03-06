@@ -747,7 +747,6 @@ const ExerciseCutscene=({exName,totalLifted,onDone})=>{
   const anim=CUTSCENE_ANIMATIONS[animIdx];
 
   useEffect(()=>{
-    [0,150,300,500,700].forEach((t,i)=>setTimeout(()=>playBeep(660+i*110,0.1,0.15),t));
     const fi=setInterval(()=>setFrame(f=>(f+1)%4),180);
     const ci=setInterval(()=>setCountdown(c=>{if(c<=1){onDone();return 0;}return c-1;}),1000);
     return()=>{clearInterval(fi);clearInterval(ci);};
@@ -783,11 +782,9 @@ const MissionComplete=({stats,onDone,victoryAudio})=>{
 
   useEffect(()=>{
     // Play victory music if available, else fallback beeps
-    if(victoryAudio){
+    // victory audio already started in complete() handler (iOS gesture requirement)
+    if(victoryAudio && !victoryAudio.currentTime){
       try{victoryAudio.currentTime=0;victoryAudio.play();}catch{}
-    } else {
-      [523,659,784,1047,1319,1047,784,1319,1568,2093].forEach((freq,i)=>
-        setTimeout(()=>playBeep(freq,0.18,0.18),i*120));
     }
 
     const fi=setInterval(()=>setFrame(f=>(f+1)%4),180);
@@ -1083,6 +1080,9 @@ const WorkoutScreen=({dayKey,appData,onComplete,onBack,beepAudio,victoryAudio})=
   });
 
   const markDone=(ei,si)=>{
+    // Unlock + play beeps synchronously inside user gesture (iOS requirement)
+    try{getAudioCtx();}catch{}
+    [0,150,300,500,700].forEach((t,i)=>setTimeout(()=>playBeep(660+i*110,0.1,0.15),t));
     setSets(p=>{
       const n=p.map(e=>[...e]);
       n[ei][si]={...n[ei][si],done:true};
@@ -1117,6 +1117,10 @@ const WorkoutScreen=({dayKey,appData,onComplete,onBack,beepAudio,victoryAudio})=
   };
 
   const complete=()=>{
+    // Unlock AudioContext + start victory audio inside user gesture (iOS)
+    try{getAudioCtx();}catch{}
+    const va=victoryAudio?.current;
+    if(va){try{va.currentTime=0;va.play();}catch{}}
     const newLogs={...appData.logs};
     day.exercises.forEach((ex,i)=>{
       const k=`${dayKey}__${ex.id}`,best=sets[i].filter(s=>s.done).sort((a,b)=>b.weight-a.weight)[0];
