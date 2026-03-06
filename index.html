@@ -231,6 +231,204 @@ const HomeScreen=({appData,onStart,audio,onToggleMusic,musicPlaying})=>{
   </div>;
 };
 
+// ─── EXERCISE COMPLETE CUTSCENE ──────────────────────────
+const ExerciseCutscene=({exName,totalLifted,onDone})=>{
+  const [frame,setFrame]=useState(0);
+  const [countdown,setCountdown]=useState(5);
+
+  useEffect(()=>{
+    const fi=setInterval(()=>setFrame(f=>(f+1)%4),200);
+    const ci=setInterval(()=>setCountdown(c=>{if(c<=1){onDone();return 0;}return c-1;}),1000);
+    return()=>{clearInterval(fi);clearInterval(ci);};
+  },[]);
+
+  // Pumping guy animation frames
+  const PumpGuy=({f})=>{
+    const armY=[3,2,1,2][f];
+    const legL=[9,10,9,8][f];
+    const legR=[9,8,9,10][f];
+    return<svg width="80" height="120" viewBox="0 0 20 30" style={{imageRendering:"pixelated"}}>
+      {/* glow */}
+      <ellipse cx="10" cy="28" rx="7" ry="2" fill="rgba(255,45,120,0.3)"/>
+      {/* legs */}
+      <rect x="8" y={legL} width="3" height="6" fill="#ff2d78"/>
+      <rect x="12" y={legR} width="3" height="6" fill="#ff2d78"/>
+      {/* shoes */}
+      <rect x="7" y={legL+5} width="4" height="2" fill="#e8ff3c"/>
+      <rect x="11" y={legR+5} width="4" height="2" fill="#e8ff3c"/>
+      {/* body */}
+      <rect x="7" y="12" width="9" height="8" fill="#00e5ff"/>
+      {/* "M" on chest */}
+      <rect x="9" y="13" width="1" height="3" fill="#0a0010"/>
+      <rect x="11" y="13" width="1" height="3" fill="#0a0010"/>
+      <rect x="10" y="14" width="1" height="1" fill="#0a0010"/>
+      {/* arms - pumping */}
+      <rect x="3" y={armY+8} width="4" height="3" fill="#00e5ff"/>
+      <rect x="16" y={armY+8} width="4" height="3" fill="#00e5ff"/>
+      {/* fists */}
+      <rect x="2" y={armY+7} width="3" height="3" fill="#f4a460"/>
+      <rect x="17" y={armY+7} width="3" height="3" fill="#f4a460"/>
+      {/* head */}
+      <rect x="8" y="5" width="7" height="7" fill="#f4a460"/>
+      {/* eyes */}
+      <rect x="10" y="7" width="1" height="2" fill="#0a0010"/>
+      <rect x="13" y="7" width="1" height="2" fill="#0a0010"/>
+      {/* hair */}
+      <rect x="8" y="5" width="7" height="2" fill="#2d1b00"/>
+      {/* sweat drops */}
+      {f%2===0&&<rect x="6" y="6" width="1" height="2" fill="#00e5ff" opacity="0.7"/>}
+      {f%2===1&&<rect x="17" y="7" width="1" height="2" fill="#00e5ff" opacity="0.7"/>}
+    </svg>;
+  };
+
+  const flashColor=["#ff2d78","#b44fff","#00e5ff","#e8ff3c"][frame];
+
+  return<div style={{position:"fixed",inset:0,zIndex:1000,background:"#0a0010",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-start",padding:"40px 24px"}}>
+    {/* Flash border */}
+    <div style={{position:"absolute",inset:0,border:`4px solid ${flashColor}`,pointerEvents:"none",transition:"border-color 0.1s"}}/>
+
+    {/* EXERCISE NAME */}
+    <div style={{fontSize:8,color:"#444",letterSpacing:3,marginBottom:8,marginTop:20}}>EXERCISE COMPLETE</div>
+    <div style={{fontSize:frame%2===0?16:15,color:flashColor,fontFamily:"'Press Start 2P',monospace",textAlign:"center",lineHeight:1.8,textShadow:`0 0 30px ${flashColor}`,transition:"font-size 0.1s",marginBottom:4}}>
+      {exName.toUpperCase()}
+    </div>
+    <div style={{fontSize:12,color:"#fff",fontFamily:"'Press Start 2P',monospace",marginBottom:32}}>COMPLETED!</div>
+
+    {/* Animation */}
+    <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <PumpGuy f={frame}/>
+    </div>
+
+    {/* Stats */}
+    <div style={{marginBottom:16,textAlign:"center"}}>
+      <div style={{fontSize:7,color:"#888",marginBottom:8}}>YOU LIFTED</div>
+      <div style={{fontSize:20,color:"#e8ff3c",fontFamily:"'Press Start 2P',monospace",textShadow:"0 0 20px #e8ff3c"}}>{totalLifted.toLocaleString()}</div>
+      <div style={{fontSize:8,color:"#e8ff3c",marginTop:4}}>POUNDS</div>
+    </div>
+
+    {/* Countdown + skip */}
+    <button onClick={onDone} style={{background:"transparent",border:"2px solid #333",color:"#444",fontFamily:"'Press Start 2P',monospace",fontSize:7,padding:"10px 20px",cursor:"pointer",marginBottom:20}}>
+      SKIP ({countdown})
+    </button>
+  </div>;
+};
+
+// ─── MISSION COMPLETE SCREEN ─────────────────────────────
+const MissionComplete=({stats,onDone})=>{
+  const [frame,setFrame]=useState(0);
+  const [fireworks,setFireworks]=useState([]);
+
+  useEffect(()=>{
+    const fi=setInterval(()=>setFrame(f=>(f+1)%4),180);
+    // Generate fireworks
+    const genFW=()=>Array.from({length:12},(_,i)=>({
+      id:Date.now()+i,
+      x:10+Math.random()*80,
+      y:5+Math.random()*40,
+      color:["#ff2d78","#e8ff3c","#00e5ff","#b44fff","#fff","#ff8c00"][Math.floor(Math.random()*6)],
+      size:Math.random()*3+1,
+    }));
+    setFireworks(genFW());
+    const fwi=setInterval(()=>setFireworks(genFW()),600);
+    return()=>{clearInterval(fi);clearInterval(fwi);};
+  },[]);
+
+  // Max overhead pressing Jess
+  const MaxPressJess=({f})=>{
+    const pressY=[0,-2,-4,-2][f];
+    return<svg width="140" height="160" viewBox="0 0 35 40" style={{imageRendering:"pixelated"}}>
+      {/* Ground glow */}
+      <ellipse cx="17" cy="39" rx="14" ry="2" fill="rgba(255,45,120,0.4)"/>
+
+      {/* MAX - body */}
+      <rect x="12" y="20" width="9" height="8" fill="#00e5ff"/>
+      {/* M on chest */}
+      <rect x="14" y="21" width="1" height="3" fill="#0a0010"/>
+      <rect x="16" y="21" width="1" height="3" fill="#0a0010"/>
+      <rect x="15" y="22" width="1" height="1" fill="#0a0010"/>
+      {/* MAX legs - wide stance */}
+      <rect x="11" y="28" width="4" height="7" fill="#ff2d78"/>
+      <rect x="18" y="28" width="4" height="7" fill="#ff2d78"/>
+      <rect x="10" y="34" width="5" height="2" fill="#e8ff3c"/>
+      <rect x="17" y="34" width="5" height="2" fill="#e8ff3c"/>
+      {/* MAX arms - pressing up */}
+      <rect x="5" y={14+pressY} width="7" height="3" fill="#00e5ff"/>
+      <rect x="21" y={14+pressY} width="7" height="3" fill="#00e5ff"/>
+      <rect x="4" y={12+pressY} width="3" height="4" fill="#f4a460"/>
+      <rect x="26" y={12+pressY} width="3" height="4" fill="#f4a460"/>
+      {/* MAX head */}
+      <rect x="13" y="13" width="7" height="7" fill="#f4a460"/>
+      <rect x="13" y="13" width="7" height="2" fill="#2d1b00"/>
+      <rect x="15" y="15" width="1" height="2" fill="#0a0010"/>
+      <rect x="18" y="15" width="1" height="2" fill="#0a0010"/>
+      {/* effort mouth */}
+      <rect x="15" y="18" width="3" height="1" fill="#0a0010"/>
+
+      {/* JESS - overhead, laying flat */}
+      <rect x="6" y={6+pressY} width="20" height="5" fill="#ff2d78"/>
+      {/* Jess body details */}
+      <rect x="8" y={7+pressY} width="2" height="3" fill="#f4a460"/>
+      {/* Jess head */}
+      <rect x="24" y={5+pressY} width="6" height="6" fill="#f4a460"/>
+      <rect x="24" y={5+pressY} width="6" height="2" fill="#c41678"/>
+      <rect x="25" y={7+pressY} width="1" height="2" fill="#0a0010"/>
+      <rect x="27" y={7+pressY} width="1" height="2" fill="#0a0010"/>
+      <rect x="25" y={9+pressY} width="3" height="1" fill="#ff6688"/>
+      {/* Jess arms up for balance */}
+      <rect x="4" y={5+pressY} width="4" height="2" fill="#f4a460"/>
+      {/* Jess legs */}
+      <rect x="4" y={6+pressY} width="3" height="5" fill="#ff2d78"/>
+      {/* Stars around jess */}
+      {f%2===0&&<>
+        <rect x="2" y={3+pressY} width="2" height="2" fill="#e8ff3c"/>
+        <rect x="30" y={4+pressY} width="2" height="2" fill="#e8ff3c"/>
+      </>}
+    </svg>;
+  };
+
+  return<div style={{position:"fixed",inset:0,zIndex:1000,background:"#0a0010",overflowY:"auto"}}>
+    {/* Fireworks layer */}
+    <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
+      {fireworks.map(fw=>(
+        <div key={fw.id} style={{position:"absolute",left:`${fw.x}%`,top:`${fw.y}%`,width:fw.size*4,height:fw.size*4,background:fw.color,borderRadius:"50%",boxShadow:`0 0 ${fw.size*6}px ${fw.color}`,transition:"all 0.3s"}}/>
+      ))}
+    </div>
+
+    <div style={{position:"relative",zIndex:1,display:"flex",flexDirection:"column",alignItems:"center",padding:"40px 24px 100px"}}>
+      <div style={{fontSize:7,color:"#e8ff3c",letterSpacing:3,marginBottom:12}}>🏆 🏆 🏆</div>
+      <div style={{fontSize:14,color:"#e8ff3c",fontFamily:"'Press Start 2P',monospace",textAlign:"center",textShadow:"0 0 30px #e8ff3c",lineHeight:2,marginBottom:4}}>MISSION</div>
+      <div style={{fontSize:14,color:"#ff2d78",fontFamily:"'Press Start 2P',monospace",textAlign:"center",textShadow:"0 0 30px #ff2d78",lineHeight:2,marginBottom:24}}>COMPLETE!</div>
+
+      {/* Animation */}
+      <MaxPressJess f={frame}/>
+
+      {/* Stats grid */}
+      <div style={{width:"100%",maxWidth:360,marginTop:24}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          {[
+            ["SETS","💪",stats.sets],
+            ["TOTAL REPS","🔢",stats.reps],
+            ["TOTAL LIFTED","⚡",`${stats.totalLifted.toLocaleString()} lb`],
+            ["SESSION TIME","⏱",`${stats.mins}:${stats.secs}`],
+            ["EXERCISES","🏋️",stats.exercises],
+            ["WORKOUTS","🗓️",stats.workoutCount],
+          ].map(([label,icon,val])=>(
+            <div key={label} className="card-retro" style={{padding:12,textAlign:"center"}}>
+              <div style={{fontSize:14,marginBottom:4}}>{icon}</div>
+              <div style={{fontSize:12,color:"#fff",fontFamily:"'Press Start 2P',monospace",marginBottom:4}}>{val}</div>
+              <div style={{fontSize:6,color:"#444",letterSpacing:1}}>{label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <button className="btn-retro btn-yellow" onClick={onDone} style={{marginTop:24,fontSize:9,padding:"14px 28px",width:"100%",maxWidth:360}}>
+        🕹️ BACK TO HOME
+      </button>
+    </div>
+  </div>;
+};
+
 // ─── EXERCISE NOTES (rotating per set) ───────────────────
 const EX_NOTES = {
   swiss_press: ["Neutral grip — wrist-safe","Tuck elbows 45°, not flared","Control the descent, 2 sec down","Full lockout at top"],
@@ -371,6 +569,8 @@ const WorkoutScreen=({dayKey,appData,onComplete,onBack,beepAudio})=>{
   const [sessionStart]=useState(()=>Date.now());
   const [elapsed,setElapsed]=useState(0);
   const [timerState,setTimerState]=useState({running:false,startedAt:0,totalSeconds:180});
+  const [cutscene,setCutscene]=useState(null); // {exName, totalLifted}
+  const [showMission,setShowMission]=useState(false);
 
   // Session clock
   useEffect(()=>{
@@ -398,11 +598,22 @@ const WorkoutScreen=({dayKey,appData,onComplete,onBack,beepAudio})=>{
   });
 
   const markDone=(ei,si)=>{
-    setSets(p=>{const n=p.map(e=>[...e]);n[ei][si]={...n[ei][si],done:true};return n});
-    // Auto-start timer
+    setSets(p=>{
+      const n=p.map(e=>[...e]);
+      n[ei][si]={...n[ei][si],done:true};
+      // Check if all sets of this exercise are now done
+      const allDone=n[ei].every(s=>s.done);
+      if(allDone){
+        const exDone=day.exercises[ei];
+        const totalLifted=n[ei].reduce((acc,s)=>acc+(s.weight||0)*(s.reps||0),0);
+        setTimeout(()=>setCutscene({exName:exDone.name,totalLifted}),50);
+        setTimeout(()=>{
+          if(ei<day.exercises.length-1) setExIdx(ei+1);
+        },5200);
+      }
+      return n;
+    });
     setTimerState({running:true,startedAt:Date.now(),totalSeconds:restSecs});
-    if(si<day.exercises[ei].sets-1){/* stay on same exercise */}
-    else if(ei<day.exercises.length-1){setTimeout(()=>{setExIdx(ei+1)},100);}
   };
 
   const addSet=(ei)=>setSets(p=>{
@@ -430,7 +641,21 @@ const WorkoutScreen=({dayKey,appData,onComplete,onBack,beepAudio})=>{
       if(best){if(!newLogs[k])newLogs[k]=[];newLogs[k].push({date:Date.now(),weight:best.weight,reps:best.reps});if(newLogs[k].length>20)newLogs[k]=newLogs[k].slice(-20);}
     });
     const nd={...appData,logs:newLogs,workoutCount:(appData.workoutCount||0)+1};
-    saveData(nd);onComplete(nd);
+    saveData(nd);
+    // Show mission complete screen
+    const totalSets=sets.reduce((a,e)=>a+e.filter(s=>s.done).length,0);
+    const totalReps=sets.reduce((a,e)=>a+e.filter(s=>s.done).reduce((b,s)=>b+(s.reps||0),0),0);
+    const totalLifted=sets.reduce((a,e)=>a+e.filter(s=>s.done).reduce((b,s)=>b+(s.weight||0)*(s.reps||0),0),0);
+    const totalMins=Math.floor(elapsed/60);
+    const totalSecs=(elapsed%60).toString().padStart(2,"0");
+    setShowMission({
+      sets:totalSets, reps:totalReps, totalLifted,
+      mins:totalMins, secs:totalSecs,
+      exercises:day.exercises.length,
+      workoutCount:(nd.workoutCount||1),
+    });
+    // Delay home nav
+    setTimeout(()=>onComplete(nd), 30000);
   };
 
   const sessionMins=Math.floor(elapsed/60),sessionSecs=elapsed%60;
@@ -527,7 +752,9 @@ const WorkoutScreen=({dayKey,appData,onComplete,onBack,beepAudio})=>{
     />
 
     {doneCount===total&&<button className="btn-retro btn-yellow" style={{width:"100%",fontSize:10,marginTop:8}} onClick={complete}>🏆 MISSION COMPLETE!</button>}
-  </div>;
+  </div>
+  {cutscene&&<ExerciseCutscene exName={cutscene.exName} totalLifted={cutscene.totalLifted} onDone={()=>setCutscene(null)}/>}
+  {showMission&&<MissionComplete stats={showMission} onDone={()=>{setShowMission(false);}}/>};
 };
 
 
