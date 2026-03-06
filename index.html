@@ -781,12 +781,6 @@ const MissionComplete=({stats,onDone,victoryAudio})=>{
   const [sparks,setSparks]=useState([]);
 
   useEffect(()=>{
-    // Play victory music if available, else fallback beeps
-    // victory audio already started in complete() handler (iOS gesture requirement)
-    if(victoryAudio && !victoryAudio.currentTime){
-      try{victoryAudio.currentTime=0;victoryAudio.play();}catch{}
-    }
-
     const fi=setInterval(()=>setFrame(f=>(f+1)%4),180);
     // Pixel sparks
     const genSparks=()=>Array.from({length:16},(_,i)=>({
@@ -1117,10 +1111,6 @@ const WorkoutScreen=({dayKey,appData,onComplete,onBack,beepAudio,victoryAudio})=
   };
 
   const complete=()=>{
-    // Unlock AudioContext + start victory audio inside user gesture (iOS)
-    try{getAudioCtx();}catch{}
-    const va=victoryAudio?.current;
-    if(va){try{va.currentTime=0;va.play();}catch{}}
     const newLogs={...appData.logs};
     day.exercises.forEach((ex,i)=>{
       const k=`${dayKey}__${ex.id}`,best=sets[i].filter(s=>s.done).sort((a,b)=>b.weight-a.weight)[0];
@@ -1237,9 +1227,9 @@ const WorkoutScreen=({dayKey,appData,onComplete,onBack,beepAudio,victoryAudio})=
       beepAudio={beepAudio}
     />
 
-    {doneCount===total&&<button className="btn-retro btn-yellow" style={{width:"100%",fontSize:10,marginTop:8}} onClick={complete}>🏆 MISSION COMPLETE!</button>}
+    {doneCount===total&&<button className="btn-retro btn-yellow" style={{width:"100%",fontSize:10,marginTop:8}} onClick={()=>{const va=victoryAudio?.current;if(va){va.currentTime=0;va.play().catch(()=>{});}complete();}}>🏆 MISSION COMPLETE!</button>}
     {cutscene&&<ExerciseCutscene exName={cutscene.exName} totalLifted={cutscene.totalLifted} onDone={()=>{if(cutscene.nextExIdx!==null)setExIdx(cutscene.nextExIdx);setCutscene(null);}}/>}
-    {showMission&&<MissionComplete stats={showMission} victoryAudio={victoryAudio?.current} onDone={()=>{setShowMission(false);onComplete(showMission._nd);}}/>}
+    {showMission&&<MissionComplete stats={showMission} onDone={()=>{const va=victoryAudio?.current;if(va){va.pause();va.currentTime=0;}setShowMission(false);onComplete(showMission._nd);}}/>}
   </div>
   </>);};
 
