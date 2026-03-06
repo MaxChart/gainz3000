@@ -1227,7 +1227,7 @@ const WorkoutScreen=({dayKey,appData,onComplete,onBack,beepAudio,victoryAudio})=
       beepAudio={beepAudio}
     />
 
-    {doneCount===total&&<button className="btn-retro btn-yellow" style={{width:"100%",fontSize:10,marginTop:8}} onClick={()=>{const va=victoryAudio?.current;if(va){va.currentTime=0;va.play().catch(()=>{});}complete();}}>🏆 MISSION COMPLETE!</button>}
+    {doneCount===total&&<button className="btn-retro btn-yellow" style={{width:"100%",fontSize:10,marginTop:8}} onClick={async()=>{const va=victoryAudio?.current;if(va){va.currentTime=0;try{await va.play();}catch(e){console.log("victory play error",e);}}complete();}}>🏆 MISSION COMPLETE!</button>}
     {cutscene&&<ExerciseCutscene exName={cutscene.exName} totalLifted={cutscene.totalLifted} onDone={()=>{if(cutscene.nextExIdx!==null)setExIdx(cutscene.nextExIdx);setCutscene(null);}}/>}
     {showMission&&<MissionComplete stats={showMission} onDone={()=>{const va=victoryAudio?.current;if(va){va.pause();va.currentTime=0;}setShowMission(false);onComplete(showMission._nd);}}/>}
   </div>
@@ -1316,7 +1316,7 @@ function App(){
     musicRef.current=createMusicEngine();
     beepRef.current=new Audio("beep.mp3");
     beepRef.current.volume=0.8;
-    victoryRef.current=new Audio("victory.mp3.mp3");
+    victoryRef.current=new Audio("victory.mp3");
     victoryRef.current.volume=0.9;
   },[]);
   const toggleMusic=async()=>{
