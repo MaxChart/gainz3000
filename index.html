@@ -51,68 +51,70 @@
 <script type="text/babel">
 const {useState,useEffect,useRef}=React;
 
-const PROGRAM={
-  "UPPER-A":{label:"UPPER A",description:"// PUSH PROTOCOL //",emoji:"💪",restCompound:180,restAccessory:90,exercises:[
+const BUILTIN_PROGRAM={
+  "UPPER-A":{label:"UPPER A",description:"// PUSH PROTOCOL //",emoji:"💪",restCompound:180,restAccessory:90,builtin:true,exercises:[
     {id:"swiss_press",name:"Swiss Bar Bench Press",sets:4,repRange:"6-8",type:"compound",notes:"Neutral grip — wrist-safe"},
     {id:"incline_db",name:"Incline DB Press",sets:3,repRange:"8-12",type:"compound",notes:"PowerBlocks, controlled descent"},
     {id:"cable_row",name:"Cable Seated Row",sets:4,repRange:"8-12",type:"compound",notes:"Full stretch, chest pad"},
     {id:"lat_pull",name:"Lat Pulldown",sets:3,repRange:"10-12",type:"accessory",notes:"Depress scapula first"},
     {id:"cable_fly",name:"Cable Chest Fly",sets:3,repRange:"12-15",type:"accessory",notes:"Low to high, squeeze hard"},
     {id:"face_pull",name:"Face Pull",sets:3,repRange:"15-20",type:"accessory",notes:"External rotation — shoulder health"},
-    {id:"hammer_curl",name:"Hammer Curl",sets:3,repRange:"10-12",type:"accessory",notes:"Neutral grip, no wrist torque"},
   ]},
-  "LOWER-A":{label:"LOWER A",description:"// QUAD DESTROYER //",emoji:"🦵",restCompound:180,restAccessory:90,exercises:[
+  "LOWER-A":{label:"LOWER A",description:"// QUAD DESTROYER //",emoji:"🦵",restCompound:180,restAccessory:90,builtin:true,exercises:[
     {id:"belt_squat",name:"Belt Squat",sets:4,repRange:"6-8",type:"compound",notes:"No spinal load — go deep"},
     {id:"leg_press",name:"Leg Press",sets:4,repRange:"8-12",type:"compound",notes:"Shoulder width, full ROM"},
     {id:"trap_rdl",name:"Trap Bar RDL",sets:3,repRange:"8-10",type:"compound",notes:"Hip hinge, soft knees"},
     {id:"leg_curl",name:"Leg Curl",sets:3,repRange:"10-12",type:"accessory",notes:"Slow eccentric, 3 sec down"},
     {id:"leg_ext",name:"Leg Extension",sets:3,repRange:"12-15",type:"accessory",notes:"Full extension, squeeze top"},
-    {id:"calf_raise",name:"Standing Calf Raise",sets:4,repRange:"12-15",type:"accessory",notes:"Full stretch at bottom"},
   ]},
-  "UPPER-B":{label:"UPPER B",description:"// PULL PROTOCOL //",emoji:"🔥",restCompound:180,restAccessory:90,exercises:[
+  "UPPER-B":{label:"UPPER B",description:"// PULL PROTOCOL //",emoji:"🔥",restCompound:180,restAccessory:90,builtin:true,exercises:[
     {id:"trap_row",name:"Trap Bar Bent Row",sets:4,repRange:"6-8",type:"compound",notes:"Neutral grip, elbows back"},
     {id:"safety_ohp",name:"Safety Bar OHP",sets:3,repRange:"8-10",type:"compound",notes:"Strict, no lower back arch"},
     {id:"cable_pullover",name:"Cable Straight-Arm Pullover",sets:3,repRange:"12-15",type:"accessory",notes:"Lat stretch, long ROM"},
     {id:"db_row",name:"1-Arm DB Row",sets:3,repRange:"10-12",type:"accessory",notes:"Full stretch at bottom"},
     {id:"rear_delt",name:"Rear Delt Cable Fly",sets:3,repRange:"15-20",type:"accessory",notes:"Horizontal abduction"},
     {id:"cable_curl",name:"Cable Curl",sets:3,repRange:"10-12",type:"accessory",notes:"Wrist neutral, no swing"},
-    {id:"tricep_push",name:"Tricep Pushdown",sets:3,repRange:"12-15",type:"accessory",notes:"Rope or straight bar"},
   ]},
-  "LOWER-B":{label:"LOWER B",description:"// POSTERIOR CHAIN //",emoji:"⚡",restCompound:180,restAccessory:90,exercises:[
+  "LOWER-B":{label:"LOWER B",description:"// POSTERIOR CHAIN //",emoji:"⚡",restCompound:180,restAccessory:90,builtin:true,exercises:[
     {id:"trap_dead",name:"Trap Bar Deadlift",sets:4,repRange:"5-6",type:"compound",notes:"High handles if back sensitive"},
     {id:"hack_squat",name:"Hack Squat",sets:3,repRange:"8-10",type:"compound",notes:"Deep ROM, controlled"},
     {id:"db_lunge",name:"DB Walking Lunge",sets:3,repRange:"10/leg",type:"compound",notes:"Upright torso, PowerBlocks"},
     {id:"nordic",name:"Nordic Curl / Leg Curl",sets:3,repRange:"6-10",type:"accessory",notes:"Eccentric focus — 4 sec down"},
     {id:"hip_thrust",name:"Hip Thrust (DB)",sets:3,repRange:"12-15",type:"accessory",notes:"Bench + DB on hips"},
-    {id:"calf_seated",name:"Seated Calf Raise",sets:4,repRange:"12-15",type:"accessory",notes:"Soleus focus"},
   ]},
 };
-const DAY_ORDER=["UPPER-A","LOWER-A","UPPER-B","LOWER-B"];
+const BUILTIN_ORDER=["UPPER-A","LOWER-A","UPPER-B","LOWER-B"];
 
 const STORAGE_KEY="gainzmachine3000_v1";
-const loadData=()=>{try{const r=localStorage.getItem(STORAGE_KEY);return r?JSON.parse(r):{logs:{},workoutCount:0}}catch{return{logs:{},workoutCount:0}}};
+const loadData=()=>{
+  try{
+    const r=localStorage.getItem(STORAGE_KEY);
+    const d=r?JSON.parse(r):{};
+    return {
+      logs: d.logs||{},
+      workoutCount: d.workoutCount||0,
+      customPrograms: d.customPrograms||{},
+      deletedBuiltins: d.deletedBuiltins||[],
+      lastDone: d.lastDone||{}, // {dayKey: timestamp}
+    };
+  }catch{return{logs:{},workoutCount:0,customPrograms:{},deletedBuiltins:[],lastDone:{}}}
+};
 const saveData=(d)=>{try{localStorage.setItem(STORAGE_KEY,JSON.stringify(d))}catch{}};
 
-// Shared AudioContext -- created + resumed on first user gesture (iOS requirement)
-let _audioCtx=null;
-const getAudioCtx=()=>{
-  if(!_audioCtx) _audioCtx=new(window.AudioContext||window.webkitAudioContext)();
-  if(_audioCtx.state==="suspended") _audioCtx.resume();
-  return _audioCtx;
+// Merge builtin + custom programs, respecting deletions
+const buildProgram=(appData)=>{
+  const deletedSet=new Set(appData.deletedBuiltins||[]);
+  const merged={};
+  BUILTIN_ORDER.forEach(k=>{if(!deletedSet.has(k))merged[k]=BUILTIN_PROGRAM[k];});
+  Object.entries(appData.customPrograms||{}).forEach(([k,v])=>merged[k]=v);
+  return merged;
 };
-const playBeep=(freq=880,dur=0.12,vol=0.15,type="square")=>{
-  try{
-    const ctx=getAudioCtx();
-    const o=ctx.createOscillator(),g=ctx.createGain();
-    o.connect(g);g.connect(ctx.destination);
-    o.frequency.value=freq;o.type=type;
-    g.gain.setValueAtTime(vol,ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+dur);
-    o.start(ctx.currentTime);o.stop(ctx.currentTime+dur);
-  }catch{}
+const getProgramOrder=(appData)=>{
+  const deletedSet=new Set(appData.deletedBuiltins||[]);
+  const builtinKeys=BUILTIN_ORDER.filter(k=>!deletedSet.has(k));
+  const customKeys=Object.keys(appData.customPrograms||{});
+  return [...builtinKeys,...customKeys];
 };
-// Unlock AudioContext on first tap anywhere
-document.addEventListener("touchstart",()=>{try{getAudioCtx();}catch{}},{once:true,passive:true});
 
 const useAudio=()=>({
   success:()=>{},
@@ -205,10 +207,188 @@ const BG=()=>{
 
 const Scanlines=()=><div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:9999,background:"repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.08) 2px,rgba(0,0,0,.08) 4px)"}}/>;
 
-const HomeScreen=({appData,onStart,audio,onToggleMusic,musicPlaying})=>{
-  const total=appData.workoutCount||0,nextIdx=total%4,defaultDay=DAY_ORDER[nextIdx];
+// ─── FORMAT LAST DONE DATE ───────────────────────────────
+const fmtLastDone=(ts)=>{
+  if(!ts)return null;
+  const d=new Date(ts),now=new Date();
+  const diffDays=Math.floor((now-d)/(1000*60*60*24));
+  if(diffDays===0)return"TODAY";
+  if(diffDays===1)return"YESTERDAY";
+  if(diffDays<7)return`${diffDays}D AGO`;
+  return d.toLocaleDateString("en-CA",{month:"short",day:"numeric"}).toUpperCase();
+};
+
+// ─── ADD CUSTOM TRAINING MODAL ────────────────────────────
+const AddCustomModal=({onSave,onClose})=>{
+  const [name,setName]=useState("");
+  const [emoji,setEmoji]=useState("⚡");
+  const [exercises,setExercises]=useState([]);
+  const [showAddEx,setShowAddEx]=useState(false);
+  const [newEx,setNewEx]=useState({name:"",sets:3,repRange:"8-12",restSeconds:90});
+
+  const addExercise=()=>{
+    if(!newEx.name.trim())return;
+    setExercises(p=>[...p,{...newEx,id:"custom_"+Date.now()+"_"+Math.random().toString(36).slice(2),type:"accessory",notes:""}]);
+    setNewEx({name:"",sets:3,repRange:"8-12",restSeconds:90});
+    setShowAddEx(false);
+  };
+
+  const removeEx=(idx)=>setExercises(p=>p.filter((_,i)=>i!==idx));
+
+  const save=()=>{
+    if(!name.trim()||exercises.length===0)return;
+    const key="custom_"+Date.now();
+    const prog={
+      label:name.toUpperCase(),
+      description:"// CUSTOM //",
+      emoji,
+      restCompound:120,
+      restAccessory:90,
+      builtin:false,
+      custom:true,
+      exercises:exercises.map(e=>({...e,sets:parseInt(e.sets)||3})),
+    };
+    onSave(key,prog);
+  };
+
+  const emojis=["⚡","💪","🔥","🦵","🏋️","🎯","⚔️","🌀","🏆","💥"];
+
+  return<div style={{position:"fixed",inset:0,zIndex:2000,background:"rgba(0,0,0,0.92)",display:"flex",flexDirection:"column",overflowY:"auto",padding:"20px 16px 40px"}}>
+    <div style={{maxWidth:480,margin:"0 auto",width:"100%"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+        <div style={{fontSize:9,color:"#e8ff3c",letterSpacing:2}}>NEW TRAINING</div>
+        <button onClick={onClose} style={{background:"transparent",border:"none",color:"#666",fontSize:16,cursor:"pointer",fontFamily:"'Press Start 2P',monospace"}}>✕</button>
+      </div>
+
+      {/* Name */}
+      <div className="card-retro" style={{padding:14,marginBottom:12}}>
+        <div style={{fontSize:7,color:"#b44fff",marginBottom:8,letterSpacing:1}}>TRAINING NAME</div>
+        <input className="input-retro" type="text" placeholder="MY TRAINING" value={name}
+          onChange={e=>setName(e.target.value)}
+          style={{width:"100%",fontSize:10,textAlign:"left",padding:"10px 12px"}}/>
+      </div>
+
+      {/* Emoji picker */}
+      <div className="card-retro" style={{padding:14,marginBottom:12}}>
+        <div style={{fontSize:7,color:"#b44fff",marginBottom:8,letterSpacing:1}}>ICON</div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          {emojis.map(e=>(
+            <button key={e} onClick={()=>setEmoji(e)} style={{fontSize:20,background:emoji===e?"rgba(255,45,120,0.2)":"transparent",border:`2px solid ${emoji===e?"#ff2d78":"#333"}`,borderRadius:4,padding:"4px 8px",cursor:"pointer"}}>{e}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Exercises list */}
+      <div className="card-retro" style={{padding:14,marginBottom:12}}>
+        <div style={{fontSize:7,color:"#b44fff",marginBottom:10,letterSpacing:1}}>EXERCISES ({exercises.length})</div>
+        {exercises.map((ex,i)=>(
+          <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #1a1a1a"}}>
+            <div>
+              <div style={{fontSize:8,color:"#fff"}}>{ex.name}</div>
+              <div style={{fontSize:6,color:"#555",marginTop:3}}>{ex.sets} SETS • {ex.repRange} REPS • {ex.restSeconds}s REST</div>
+            </div>
+            <button onClick={()=>removeEx(i)} style={{background:"transparent",border:"none",color:"#ff2d78",fontSize:12,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",padding:"4px 8px"}}>✕</button>
+          </div>
+        ))}
+
+        {showAddEx?(
+          <div style={{marginTop:12,padding:12,border:"2px solid #333",background:"rgba(0,0,0,0.5)"}}>
+            <div style={{fontSize:7,color:"#00e5ff",marginBottom:10}}>ADD EXERCISE</div>
+            <div style={{marginBottom:8}}>
+              <div style={{fontSize:6,color:"#555",marginBottom:4}}>NAME</div>
+              <input className="input-retro" type="text" placeholder="Exercise name" value={newEx.name}
+                onChange={e=>setNewEx(p=>({...p,name:e.target.value}))}
+                style={{width:"100%",fontSize:9,textAlign:"left",padding:"8px 10px"}}/>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
+              <div>
+                <div style={{fontSize:6,color:"#555",marginBottom:4}}>SETS</div>
+                <input className="input-retro" type="text" inputMode="numeric" value={newEx.sets}
+                  onChange={e=>setNewEx(p=>({...p,sets:e.target.value}))}
+                  style={{width:"100%",fontSize:10}}/>
+              </div>
+              <div>
+                <div style={{fontSize:6,color:"#555",marginBottom:4}}>REPS</div>
+                <input className="input-retro" type="text" placeholder="8-12" value={newEx.repRange}
+                  onChange={e=>setNewEx(p=>({...p,repRange:e.target.value}))}
+                  style={{width:"100%",fontSize:9}}/>
+              </div>
+              <div>
+                <div style={{fontSize:6,color:"#555",marginBottom:4}}>REST(s)</div>
+                <input className="input-retro" type="text" inputMode="numeric" value={newEx.restSeconds}
+                  onChange={e=>setNewEx(p=>({...p,restSeconds:e.target.value}))}
+                  style={{width:"100%",fontSize:10}}/>
+              </div>
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <button className="btn-retro btn-ghost" onClick={()=>setShowAddEx(false)} style={{fontSize:7,padding:"8px 12px"}}>CANCEL</button>
+              <button className="btn-retro btn-cyan" onClick={addExercise} style={{fontSize:7,flex:1}}>SAVE EXERCISE</button>
+            </div>
+          </div>
+        ):(
+          <button className="btn-retro btn-ghost" onClick={()=>setShowAddEx(true)} style={{fontSize:7,width:"100%",marginTop:10}}>+ ADD EXERCISE</button>
+        )}
+      </div>
+
+      {/* Save */}
+      <button className="btn-retro btn-primary" onClick={save}
+        style={{width:"100%",fontSize:9,padding:"14px",opacity:(name.trim()&&exercises.length>0)?1:0.4}}>
+        💾 SAVE TRAINING
+      </button>
+    </div>
+  </div>;
+};
+
+// ─── CONFIRM DELETE MODAL ─────────────────────────────────
+const ConfirmDeleteModal=({trainingLabel,onConfirm,onCancel})=>(
+  <div style={{position:"fixed",inset:0,zIndex:3000,background:"rgba(0,0,0,0.95)",display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+    <div className="card-retro" style={{padding:24,maxWidth:320,width:"100%",borderColor:"#ff2d78",textAlign:"center"}}>
+      <div style={{fontSize:16,marginBottom:12}}>⚠️</div>
+      <div style={{fontSize:8,color:"#ff2d78",marginBottom:12,lineHeight:2}}>DELETE TRAINING?</div>
+      <div style={{fontSize:9,color:"#fff",marginBottom:6,lineHeight:1.8}}>{trainingLabel}</div>
+      <div style={{fontSize:7,color:"#555",marginBottom:20,lineHeight:2}}>THIS CANNOT BE UNDONE</div>
+      <div style={{display:"flex",gap:10}}>
+        <button className="btn-retro btn-ghost" onClick={onCancel} style={{fontSize:7,flex:1}}>CANCEL</button>
+        <button className="btn-retro btn-primary" onClick={onConfirm} style={{fontSize:7,flex:1}}>DELETE</button>
+      </div>
+    </div>
+  </div>
+);
+
+// ─── FORMAT LAST DONE DATE ───────────────────────────────
+const HomeScreen=({appData,setAppData,onStart,audio,onToggleMusic,musicPlaying})=>{
+  const PROGRAM=buildProgram(appData);
+  const DAY_ORDER=getProgramOrder(appData);
+  const total=appData.workoutCount||0;
+  const defaultDay=DAY_ORDER.length>0?DAY_ORDER[total%DAY_ORDER.length]:null;
   const [selectedDay,setSelectedDay]=useState(defaultDay);
-  const day=PROGRAM[selectedDay];
+  const [removeMode,setRemoveMode]=useState(false);
+  const [confirmDelete,setConfirmDelete]=useState(null); // dayKey to delete
+  const [showAddCustom,setShowAddCustom]=useState(false);
+
+  // Keep selectedDay valid if programs change
+  const effectiveSelected=selectedDay&&PROGRAM[selectedDay]?selectedDay:defaultDay;
+  const day=effectiveSelected?PROGRAM[effectiveSelected]:null;
+
+  const handleSaveCustom=(key,prog)=>{
+    const nd={...appData,customPrograms:{...appData.customPrograms,[key]:prog}};
+    saveData(nd);setAppData(nd);setShowAddCustom(false);setSelectedDay(key);
+  };
+
+  const handleDelete=(dayKey)=>{
+    const prog=PROGRAM[dayKey];
+    if(!prog)return;
+    let nd;
+    if(prog.builtin){
+      nd={...appData,deletedBuiltins:[...(appData.deletedBuiltins||[]),dayKey]};
+    }else{
+      const cp={...appData.customPrograms};delete cp[dayKey];
+      nd={...appData,customPrograms:cp};
+    }
+    saveData(nd);setAppData(nd);setConfirmDelete(null);
+    setSelectedDay(null);setRemoveMode(false);
+  };
+
   return<div className="slide-in" style={{padding:"0 16px 100px"}}>
     <div style={{textAlign:"center",padding:"30px 0 20px"}}>
       <div className="glitch-text" style={{fontSize:11,color:"#ff2d78",letterSpacing:2,marginBottom:6}}>GAINZ MACHINE</div>
@@ -228,547 +408,137 @@ const HomeScreen=({appData,onStart,audio,onToggleMusic,musicPlaying})=>{
         </div>
       ))}
     </div>
-    <div className="card-retro" style={{padding:16,marginBottom:16,borderColor:"#ff2d78",boxShadow:"0 0 20px rgba(255,45,120,.2)"}}>
+
+    {day&&<div className="card-retro" style={{padding:16,marginBottom:16,borderColor:"#ff2d78",boxShadow:"0 0 20px rgba(255,45,120,.2)"}}>
       <div style={{fontSize:7,color:"#ff2d78",marginBottom:10,letterSpacing:2}}>NEXT MISSION</div>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
         <div style={{fontSize:28}}>{day.emoji}</div>
         <div><div style={{fontSize:13,color:"#fff",marginBottom:4}}>{day.label}</div><div style={{fontSize:7,color:"#b44fff"}}>{day.description}</div></div>
       </div>
       <div style={{fontSize:7,color:"#444",marginBottom:12}}>{day.exercises.length} EXERCISES • {day.exercises.reduce((a,e)=>a+e.sets,0)} SETS TOTAL</div>
-      <button className="btn-retro btn-primary" style={{width:"100%",fontSize:10}} onClick={()=>{audio.startJingle();onStart(selectedDay)}}>▶ INSERT COIN TO START</button>
-    </div>
+      <button className="btn-retro btn-primary" style={{width:"100%",fontSize:10}} onClick={()=>{audio.startJingle();onStart(effectiveSelected)}}>▶ INSERT COIN TO START</button>
+    </div>}
+
+    {/* PICK YOUR TRAINING */}
     <div className="card-retro" style={{padding:12,marginBottom:16}}>
-      <div style={{fontSize:7,color:"#00e5ff",marginBottom:10,letterSpacing:2}}>WEEK SCHEDULE</div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-        {DAY_ORDER.map((d,i)=>{const done=i<nextIdx,cur=i===nextIdx;return(
-          <button key={d} onClick={()=>setSelectedDay(d)} style={{padding:8,border:`2px solid ${selectedDay===d?"#e8ff3c":cur?"#ff2d78":done?"#1a1a2e":"#333"}`,background:done?"#050010":"transparent",cursor:"pointer",textAlign:"left",fontFamily:"'Press Start 2P',monospace",width:"100%"}}>
-            <div style={{fontSize:7,color:selectedDay===d?"#e8ff3c":cur?"#ff2d78":done?"#555":"#aaa"}}>{cur?"▶ ":done?"✓ ":"  "}{PROGRAM[d].label}</div>
-            <div style={{fontSize:6,color:"#555",marginTop:3}}>{PROGRAM[d].description}</div>
-          </button>
-        );})}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+        <div style={{fontSize:7,color:"#00e5ff",letterSpacing:2}}>PICK YOUR TRAINING</div>
+        <button
+          onClick={()=>setRemoveMode(r=>!r)}
+          style={{background:removeMode?"rgba(255,45,120,0.15)":"transparent",border:`2px solid ${removeMode?"#ff2d78":"#333"}`,color:removeMode?"#ff2d78":"#666",fontFamily:"'Press Start 2P',monospace",fontSize:6,padding:"4px 8px",cursor:"pointer",letterSpacing:1}}>
+          {removeMode?"✕ DONE":"REMOVE"}
+        </button>
       </div>
+
+      {DAY_ORDER.length===0&&<div style={{fontSize:7,color:"#333",textAlign:"center",padding:12}}>NO TRAININGS. ADD ONE BELOW.</div>}
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:10}}>
+        {DAY_ORDER.map((d)=>{
+          const prog=PROGRAM[d];
+          const lastTs=appData.lastDone?.[d];
+          const lastStr=fmtLastDone(lastTs);
+          const isSelected=effectiveSelected===d;
+          return(
+            <div key={d} style={{position:"relative"}}>
+              <button onClick={()=>{if(!removeMode)setSelectedDay(d);}} style={{padding:8,border:`2px solid ${isSelected?"#e8ff3c":removeMode?"#ff2d78":"#333"}`,background:removeMode?"rgba(255,45,120,0.05)":"transparent",cursor:"pointer",textAlign:"left",fontFamily:"'Press Start 2P',monospace",width:"100%",opacity:removeMode?0.8:1}}>
+                <div style={{fontSize:7,color:isSelected?"#e8ff3c":removeMode?"#ff2d78":"#aaa"}}>{prog.emoji} {prog.label}</div>
+                <div style={{fontSize:6,color:"#444",marginTop:3}}>{prog.description}</div>
+                {lastStr&&<div style={{fontSize:5,color:"#555",marginTop:4}}>{lastStr}</div>}
+              </button>
+              {removeMode&&(
+                <button onClick={()=>setConfirmDelete(d)} style={{position:"absolute",top:-6,right:-6,width:20,height:20,borderRadius:"50%",background:"#ff2d78",border:"none",color:"#000",fontSize:10,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>✕</button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <button className="btn-retro btn-ghost" onClick={()=>setShowAddCustom(true)} style={{fontSize:6,width:"100%",padding:"8px",borderColor:"#b44fff",color:"#b44fff"}}>+ ADD CUSTOM TRAINING</button>
     </div>
+
     <div style={{fontSize:7,color:"#333",textAlign:"center",lineHeight:2,padding:"0 8px"}}>★ DOUBLE PROGRESSION: HIT TOP OF REP RANGE ON ALL SETS → ADD WEIGHT NEXT TIME ★</div>
+
+    {showAddCustom&&<AddCustomModal onSave={handleSaveCustom} onClose={()=>setShowAddCustom(false)}/>}
+    {confirmDelete&&<ConfirmDeleteModal trainingLabel={PROGRAM[confirmDelete]?.label||confirmDelete} onConfirm={()=>handleDelete(confirmDelete)} onCancel={()=>setConfirmDelete(null)}/>}
   </div>;
 };
 
 // ─── EXERCISE COMPLETE CUTSCENE ──────────────────────────
-// Bank of 18 distinct pixel animations
-const CUTSCENE_ANIMATIONS=[
-  // 0: Sunglasses swag - puts on shades
-  {label:"LOOKIN' FRESH",render:({f})=>{
-    const glassX=f<2?20:8;
-    return<svg width="140" height="180" viewBox="0 0 22 26" style={{imageRendering:"pixelated"}}>
-      <ellipse cx="11" cy="25" rx="8" ry="1" fill="rgba(255,45,120,0.4)"/>
-      <rect x="2" y="0" width="8" height="1" fill="#c8860a"/><rect x="1" y="1" width="2" height="3" fill="#c8860a"/>
-      <rect x="3" y="1" width="6" height="4" fill="#f4c07a"/>
-      <rect x="3" y="4" width="6" height="1" fill="#8B4513"/>
-      {f>=2&&<><rect x="3" y="2" width="3" height="2" fill="#0a0010" opacity="0.9" rx="1"/><rect x="7" y="2" width="3" height="2" fill="#0a0010" opacity="0.9" rx="1"/><rect x="6" y="2" width="1" height="1" fill="#333"/></>}
-      {f<2&&<><rect x="4" y="2" width="1" height="1" fill="#0a0010"/><rect x="7" y="2" width="1" height="1" fill="#0a0010"/><rect x="4" y="3" width="4" height="1" fill="#8B4513" opacity="0.5"/></>}
-      {f<2&&<rect x={glassX} y={f===0?1:2} width="6" height="2" fill="#0a0010"/>}
-      <rect x="4" y="5" width="8" height="5" fill="#ff2d78"/>
-      <rect x="2" y="5" width="2" height="4" fill="#f4c07a"/><rect x="12" y="5" width="2" height="4" fill="#f4c07a"/>
-      <rect x="4" y="10" width="8" height="4" fill="#00e5ff"/>
-      <rect x="5" y="14" width="2" height="4" fill="#f4c07a"/><rect x="9" y="14" width="2" height="4" fill="#f4c07a"/>
-      <rect x="4" y="17" width="3" height="2" fill="#fff"/><rect x="9" y="17" width="3" height="2" fill="#fff"/>
-      {f>=2&&<rect x="13" y="3" width="2" height="1" fill="#e8ff3c"/>}
-    </svg>;
-  }},
-  // 1: Bicep flex double guns
-  {label:"DOUBLE GUNS",render:({f})=>{
-    const flex=[0,1,2,1][f];
-    return<svg width="140" height="180" viewBox="0 0 22 26" style={{imageRendering:"pixelated"}}>
-      <ellipse cx="11" cy="25" rx="8" ry="1" fill="rgba(255,45,120,0.4)"/>
-      <rect x="2" y="0" width="8" height="1" fill="#c8860a"/><rect x="1" y="1" width="2" height="3" fill="#c8860a"/>
-      <rect x="3" y="1" width="6" height="4" fill="#f4c07a"/>
-      <rect x="4" y="2" width="1" height="1" fill="#0a0010"/><rect x="7" y="2" width="1" height="1" fill="#0a0010"/>
-      <rect x="4" y="3" width="4" height="1" fill="#8B4513" opacity="0.6"/>
-      <rect x="4" y="5" width="8" height="5" fill="#ff2d78"/>
-      {/* arms bent up flexing */}
-      <rect x="0" y={4+flex} width="4" height={3-flex} fill="#f4c07a"/>
-      <rect x="14" y={4+flex} width="4" height={3-flex} fill="#f4c07a"/>
-      {/* bicep bulge */}
-      <rect x="0" y={3+flex} width="4" height="2" fill="#f4c07a"/>
-      <rect x="14" y={3+flex} width="4" height="2" fill="#f4c07a"/>
-      {f>1&&<><rect x="0" y={2+flex} width="4" height="2" fill="#e8860a"/><rect x="14" y={2+flex} width="4" height="2" fill="#e8860a"/></>}
-      <rect x="4" y="10" width="8" height="4" fill="#00e5ff"/>
-      <rect x="5" y="14" width="2" height="4" fill="#f4c07a"/><rect x="9" y="14" width="2" height="4" fill="#f4c07a"/>
-      <rect x="4" y="17" width="3" height="2" fill="#fff"/><rect x="9" y="17" width="3" height="2" fill="#fff"/>
-      {f>1&&<><rect x="-1" y="2" width="2" height="1" fill="#e8ff3c"/><rect x="19" y="2" width="2" height="1" fill="#e8ff3c"/></>}
-    </svg>;
-  }},
-  // 2: Shadowboxing - punching left right
-  {label:"SHADOWBOX",render:({f})=>{
-    const punchL=f===0||f===2;
-    const punchR=f===1||f===3;
-    return<svg width="140" height="180" viewBox="0 0 22 26" style={{imageRendering:"pixelated"}}>
-      <ellipse cx="11" cy="25" rx="8" ry="1" fill="rgba(255,45,120,0.4)"/>
-      <rect x="2" y="0" width="8" height="1" fill="#c8860a"/><rect x="1" y="1" width="2" height="3" fill="#c8860a"/>
-      <rect x="3" y="1" width="6" height="4" fill="#f4c07a"/>
-      <rect x="4" y="2" width="1" height="1" fill="#0a0010"/><rect x="7" y="2" width="1" height="1" fill="#0a0010"/>
-      <rect x="3" y="4" width="6" height="1" fill="#8B4513"/>
-      <rect x="4" y="5" width="8" height="5" fill="#ff2d78"/>
-      {punchL&&<><rect x="-2" y="6" width="7" height="3" fill="#f4c07a"/><rect x="-3" y="6" width="3" height="3" fill="#c8860a"/></>}
-      {!punchL&&<rect x="2" y="6" width="2" height="3" fill="#f4c07a"/>}
-      {punchR&&<><rect x="13" y="6" width="7" height="3" fill="#f4c07a"/><rect x="18" y="6" width="3" height="3" fill="#c8860a"/></>}
-      {!punchR&&<rect x="14" y="6" width="2" height="3" fill="#f4c07a"/>}
-      <rect x="4" y="10" width="8" height="4" fill="#00e5ff"/>
-      <rect x="5" y="14" width="2" height={f%2===0?5:4} fill="#f4c07a"/>
-      <rect x="9" y="14" width="2" height={f%2===1?5:4} fill="#f4c07a"/>
-      <rect x={f%2===0?4:5} y="17" width="3" height="2" fill="#fff"/>
-      <rect x={f%2===1?9:8} y="17" width="3" height="2" fill="#fff"/>
-      {punchL&&<rect x="-4" y="5" width="3" height="3" fill="#e8ff3c" opacity="0.7"/>}
-      {punchR&&<rect x="20" y="5" width="3" height="3" fill="#e8ff3c" opacity="0.7"/>}
-    </svg>;
-  }},
-  // 3: Backflip - 4 frames of rotation
-  {label:"BACKFLIP!!",render:({f})=>{
-    const configs=[
-      // standing
-      {bx:4,by:5,hw:8,hh:5,lx1:5,ly1:14,lx2:9,ly2:14,ax:2,ay:5,bax:12,bay:5},
-      // leaning back / launching
-      {bx:3,by:4,hw:9,hh:5,lx1:4,ly1:13,lx2:8,ly2:11,ax:1,ay:3,bax:11,bay:4},
-      // upside down
-      {bx:4,by:8,hw:8,hh:4,lx1:3,ly1:6,lx2:7,ly2:6,ax:2,ay:9,bax:12,bay:9},
-      // landing
-      {bx:4,by:5,hw:8,hh:5,lx1:4,ly1:14,lx2:9,ly2:14,ax:2,ay:6,bax:12,bay:6},
-    ];
-    const c=configs[f];
-    return<svg width="140" height="180" viewBox="0 0 22 26" style={{imageRendering:"pixelated"}}>
-      <ellipse cx="11" cy="25" rx="8" ry="1" fill="rgba(255,45,120,0.4)"/>
-      {f<2&&<><rect x="2" y="0" width="8" height="1" fill="#c8860a"/><rect x="1" y="1" width="2" height="3" fill="#c8860a"/>
-        <rect x="3" y="1" width="6" height="4" fill="#f4c07a"/>
-        <rect x="4" y="2" width="1" height="1" fill="#0a0010"/><rect x="7" y="2" width="1" height="1" fill="#0a0010"/></>}
-      {f===2&&<><rect x="3" y="12" width="6" height="4" fill="#f4c07a"/>
-        <rect x="4" y="13" width="1" height="1" fill="#0a0010"/><rect x="7" y="13" width="1" height="1" fill="#0a0010"/>
-        <rect x="2" y="11" width="8" height="1" fill="#c8860a"/></>}
-      {f===3&&<><rect x="2" y="0" width="8" height="1" fill="#c8860a"/><rect x="1" y="1" width="2" height="3" fill="#c8860a"/>
-        <rect x="3" y="1" width="6" height="4" fill="#f4c07a"/>
-        <rect x="4" y="2" width="1" height="1" fill="#0a0010"/><rect x="7" y="2" width="1" height="1" fill="#0a0010"/></>}
-      <rect x={c.bx} y={c.by} width={c.hw} height={c.hh} fill="#ff2d78"/>
-      <rect x={c.ax} y={c.ay} width="3" height="3" fill="#f4c07a"/>
-      <rect x={c.bax} y={c.bay} width="3" height="3" fill="#f4c07a"/>
-      <rect x={c.bx} y={c.by+c.hh} width={c.hw} height="3" fill="#00e5ff"/>
-      <rect x={c.lx1} y={c.ly1} width="2" height="4" fill="#f4c07a"/>
-      <rect x={c.lx2} y={c.ly2} width="2" height="4" fill="#f4c07a"/>
-      {f===2&&<><rect x="2" y="22" width="3" height="2" fill="#fff"/><rect x="7" y="22" width="3" height="2" fill="#fff"/></>}
-      {f!==2&&<><rect x="4" y="22" width="3" height="2" fill="#fff"/><rect x="9" y="22" width="3" height="2" fill="#fff"/></>}
-      {f===2&&<><rect x="0" y="10" width="2" height="2" fill="#e8ff3c"/><rect x="18" y="8" width="2" height="2" fill="#e8ff3c"/></>}
-      {f===1&&<rect x="11" y="1" width="2" height="4" fill="#e8ff3c" opacity="0.8"/>}
-    </svg>;
-  }},
-  // 4: Splits
-  {label:"THE SPLITS!",render:({f})=>{
-    const spread=[2,5,8,10][f];
-    return<svg width="160" height="160" viewBox="0 0 28 22" style={{imageRendering:"pixelated"}}>
-      <ellipse cx="14" cy="21" rx="12" ry="1" fill="rgba(255,45,120,0.4)"/>
-      <rect x="2" y="0" width="8" height="1" fill="#c8860a"/><rect x="1" y="1" width="2" height="3" fill="#c8860a"/>
-      <rect x="3" y="1" width="6" height="4" fill="#f4c07a"/>
-      <rect x="4" y="2" width="1" height="1" fill="#0a0010"/><rect x="7" y="2" width="1" height="1" fill="#0a0010"/>
-      <rect x="4" y="3" width="4" height="1" fill="#8B4513" opacity="0.6"/>
-      {/* torso stays centered */}
-      <rect x="4" y="5" width="8" height="5" fill="#ff2d78"/>
-      <rect x="2" y="6" width="2" height="3" fill="#f4c07a"/><rect x="12" y="6" width="2" height="3" fill="#f4c07a"/>
-      <rect x="4" y="10" width="8" height="3" fill="#00e5ff"/>
-      {/* legs spreading out */}
-      <rect x={6-spread} y={13+Math.min(spread/2,3)} width="3" height="3" fill="#f4c07a"/>
-      <rect x={11+spread} y={13+Math.min(spread/2,3)} width="3" height="3" fill="#f4c07a"/>
-      {/* shoes at extremes */}
-      <rect x={5-spread} y={15+Math.min(spread/2,3)} width="4" height="2" fill="#fff"/>
-      <rect x={12+spread} y={15+Math.min(spread/2,3)} width="4" height="2" fill="#fff"/>
-      {f>=3&&<><rect x="0" y="18" width="3" height="1" fill="#e8ff3c"/><rect x="24" y="18" width="3" height="1" fill="#e8ff3c"/></>}
-    </svg>;
-  }},
-  // 5: Driving convertible 80s Cali
-  {label:"CALI CRUISIN'",render:({f})=>{
-    const wheelR=(f%2)*1;
-    return<svg width="180" height="160" viewBox="0 0 36 24" style={{imageRendering:"pixelated"}}>
-      {/* road */}
-      <rect x="0" y="20" width="36" height="4" fill="#333"/>
-      <rect x={2-(f*3)%8} y="22" width="4" height="1" fill="#e8ff3c"/>
-      <rect x={10-(f*3)%8} y="22" width="4" height="1" fill="#e8ff3c"/>
-      <rect x={18-(f*3)%8} y="22" width="4" height="1" fill="#e8ff3c"/>
-      <rect x={26-(f*3)%8} y="22" width="4" height="1" fill="#e8ff3c"/>
-      {/* palm trees bg */}
-      <rect x={28-(f*2)%10} y="8" width="1" height="6" fill="#2d8a00"/>
-      <rect x={26-(f*2)%10} y="6" width="5" height="3" fill="#2d8a00"/>
-      <rect x={5-(f*2)%10+10} y="10" width="1" height="5" fill="#2d8a00"/>
-      <rect x={3-(f*2)%10+10} y="8" width="5" height="3" fill="#2d8a00"/>
-      {/* car body */}
-      <rect x="4" y="14" width="24" height="6" fill="#ff2d78"/>
-      <rect x="6" y="11" width="14" height="5" fill="#ff2d78"/>
-      {/* windshield */}
-      <rect x="7" y="12" width="8" height="4" fill="#00e5ff" opacity="0.7"/>
-      {/* car details */}
-      <rect x="4" y="14" width="24" height="1" fill="#c8000a"/>
-      <rect x="26" y="15" width="3" height="2" fill="#e8ff3c"/>
-      <rect x="4" y="15" width="2" height="1" fill="#ff8800"/>
-      {/* wheels */}
-      <rect x="6" y={19+wheelR} width="5" height="4" fill="#222"/>
-      <rect x="7" y={20+wheelR} width="3" height="2" fill="#666"/>
-      <rect x="21" y={19+wheelR} width="5" height="4" fill="#222"/>
-      <rect x="22" y={20+wheelR} width="3" height="2" fill="#666"/>
-      {/* Guy driving - just head + arm out window */}
-      <rect x="15" y="10" width="5" height="4" fill="#f4c07a"/>
-      <rect x="14" y="10" width="7" height="2" fill="#c8860a"/>
-      <rect x="16" y="11" width="1" height="1" fill="#0a0010"/>
-      <rect x="18" y="11" width="1" height="1" fill="#0a0010"/>
-      {/* sunglasses on */}
-      <rect x="15" y="11" width="2" height="1" fill="#0a0010"/><rect x="18" y="11" width="2" height="1" fill="#0a0010"/>
-      {/* arm hanging out */}
-      <rect x="20" y={12+f%2} width="5" height="2" fill="#f4c07a"/>
-      {/* wind lines */}
-      <rect x={30-(f*2)%6} y="9" width="3" height="1" fill="#b44fff" opacity="0.6"/>
-      <rect x={32-(f*2)%6} y="7" width="2" height="1" fill="#b44fff" opacity="0.4"/>
-    </svg>;
-  }},
-  // 6: Victory dance - cabbage patch
-  {label:"VICTORY DANCE",render:({f})=>{
-    const dx=[0,1,0,-1][f], dy=[0,-1,0,1][f];
-    return<svg width="140" height="180" viewBox="0 0 22 26" style={{imageRendering:"pixelated"}}>
-      <ellipse cx="11" cy="25" rx="8" ry="1" fill="rgba(255,45,120,0.4)"/>
-      <rect x={2+dx} y="0" width="8" height="1" fill="#c8860a"/>
-      <rect x={1+dx} y="1" width="2" height="3" fill="#c8860a"/>
-      <rect x={3+dx} y="1" width="6" height="4" fill="#f4c07a"/>
-      <rect x={4+dx} y="2" width="1" height="1" fill="#0a0010"/>
-      <rect x={7+dx} y="2" width="1" height="1" fill="#0a0010"/>
-      <rect x={4+dx} y="3" width="4" height="1" fill="#8B4513" opacity="0.6"/>
-      <rect x={4+dx} y={5+dy} width="8" height="5" fill="#b44fff"/>
-      <rect x={2+dx} y={5+dy} width="2" height="4" fill="#f4c07a"/>
-      <rect x={12+dx} y={5+dy} width="2" height="4" fill="#f4c07a"/>
-      {/* arms spinning */}
-      <rect x={0+dx} y={4+dy} width="3" height="2" fill="#f4c07a"/>
-      <rect x={13+dx} y={6+dy} width="3" height="2" fill="#f4c07a"/>
-      <rect x={4+dx} y={10+dy} width="8" height="4" fill="#00e5ff"/>
-      <rect x={5+dx} y="14" width="2" height="4" fill="#f4c07a"/>
-      <rect x={9+dx} y="14" width="2" height="4" fill="#f4c07a"/>
-      <rect x="4" y="17" width="3" height="2" fill="#fff"/>
-      <rect x="9" y="17" width="3" height="2" fill="#fff"/>
-      <rect x={f%2===0?1:15} y={4+dy} width="2" height="2" fill="#e8ff3c"/>
-    </svg>;
-  }},
-  // 7: Moonwalk
-  {label:"MOONWALK",render:({f})=>{
-    const slideX=[0,1,2,3][f];
-    return<svg width="140" height="180" viewBox="0 0 22 26" style={{imageRendering:"pixelated"}}>
-      <ellipse cx={11-slideX} cy="25" rx="8" ry="1" fill="rgba(255,45,120,0.4)"/>
-      <rect x={2-slideX} y="0" width="8" height="1" fill="#c8860a"/>
-      <rect x={1-slideX} y="1" width="2" height="3" fill="#c8860a"/>
-      <rect x={3-slideX} y="1" width="6" height="4" fill="#f4c07a"/>
-      <rect x={4-slideX} y="2" width="1" height="1" fill="#0a0010"/>
-      <rect x={7-slideX} y="2" width="1" height="1" fill="#0a0010"/>
-      <rect x={3-slideX} y="4" width="6" height="1" fill="#8B4513"/>
-      <rect x={4-slideX} y="5" width="8" height="5" fill="#0a0010"/>
-      <rect x={2-slideX} y="6" width="2" height="3" fill="#f4c07a"/>
-      <rect x={12-slideX} y="6" width="2" height="3" fill="#f4c07a"/>
-      <rect x={4-slideX} y="10" width="8" height="4" fill="#0a0010"/>
-      {/* moonwalk legs - one forward one back */}
-      <rect x={3-slideX} y="14" width="3" height="5" fill="#f4c07a"/>
-      <rect x={8-slideX} y="14" width="3" height="3" fill="#f4c07a"/>
-      <rect x={8-slideX} y="17" width="3" height="2" fill="#f4c07a"/>
-      {/* shoes - white glove era */}
-      <rect x={2-slideX} y="18" width="4" height="2" fill="#fff"/>
-      <rect x={8-slideX} y="18" width="5" height="2" fill="#fff"/>
-      {/* sparkle */}
-      {f%2===0&&<rect x={14-slideX} y="5" width="2" height="2" fill="#e8ff3c"/>}
-    </svg>;
-  }},
-  // 8: Waving trophy
-  {label:"TROPHY TIME",render:({f})=>{
-    const waveY=[0,-1,-2,-1][f];
-    return<svg width="140" height="180" viewBox="0 0 22 28" style={{imageRendering:"pixelated"}}>
-      <ellipse cx="11" cy="27" rx="8" ry="1" fill="rgba(255,45,120,0.4)"/>
-      <rect x="2" y="0" width="8" height="1" fill="#c8860a"/><rect x="1" y="1" width="2" height="3" fill="#c8860a"/>
-      <rect x="3" y="1" width="6" height="4" fill="#f4c07a"/>
-      <rect x="4" y="2" width="1" height="1" fill="#0a0010"/><rect x="7" y="2" width="1" height="1" fill="#0a0010"/>
-      <rect x="4" y="3" width="4" height="1" fill="#8B4513" opacity="0.6"/>
-      <rect x="4" y="5" width="8" height="5" fill="#ff2d78"/>
-      {/* left arm down */}
-      <rect x="2" y="6" width="2" height="4" fill="#f4c07a"/>
-      {/* right arm up holding trophy */}
-      <rect x="12" y={3+waveY} width="2" height="5" fill="#f4c07a"/>
-      {/* trophy */}
-      <rect x="13" y={waveY} width="4" height="3" fill="#e8ff3c"/>
-      <rect x="12" y={1+waveY} width="2" height="2" fill="#e8ff3c"/>
-      <rect x="18" y={1+waveY} width="2" height="2" fill="#e8ff3c"/>
-      <rect x="14" y={3+waveY} width="2" height="2" fill="#e8ff3c"/>
-      <rect x="13" y={5+waveY} width="4" height="1" fill="#e8ff3c"/>
-      <rect x="4" y="10" width="8" height="4" fill="#00e5ff"/>
-      <rect x="5" y="14" width="2" height="5" fill="#f4c07a"/>
-      <rect x="9" y="14" width="2" height="5" fill="#f4c07a"/>
-      <rect x="4" y="18" width="3" height="2" fill="#fff"/><rect x="9" y="18" width="3" height="2" fill="#fff"/>
-      {f%2===0&&<rect x="17" y={waveY} width="2" height="1" fill="#fff" opacity="0.8"/>}
-    </svg>;
-  }},
-  // 9: Pointing finger guns
-  {label:"FINGER GUNS",render:({f})=>{
-    return<svg width="140" height="180" viewBox="0 0 22 26" style={{imageRendering:"pixelated"}}>
-      <ellipse cx="11" cy="25" rx="8" ry="1" fill="rgba(255,45,120,0.4)"/>
-      <rect x="2" y="0" width="8" height="1" fill="#c8860a"/><rect x="1" y="1" width="2" height="3" fill="#c8860a"/>
-      <rect x="3" y="1" width="6" height="4" fill="#f4c07a"/>
-      <rect x="4" y="2" width="1" height="1" fill="#0a0010"/><rect x="7" y="2" width="1" height="1" fill="#0a0010"/>
-      {/* wink */}
-      {f%2===0&&<rect x="4" y="2" width="1" height="1" fill="#f4c07a"/>}
-      <rect x="4" y="3" width="4" height="1" fill="#8B4513" opacity="0.6"/>
-      <rect x="4" y="5" width="8" height="5" fill="#ff2d78"/>
-      {/* arms out pointing */}
-      <rect x="-2" y="6" width="6" height="2" fill="#f4c07a"/>
-      <rect x="14" y="6" width="6" height="2" fill="#f4c07a"/>
-      {/* pointing fingers */}
-      <rect x="-3" y="5" width="2" height="2" fill="#f4c07a"/>
-      <rect x="19" y="5" width="2" height="2" fill="#f4c07a"/>
-      {/* gun smoke */}
-      {f%2===0&&<><rect x="-5" y="4" width="2" height="2" fill="#fff" opacity="0.6"/><rect x="21" y="4" width="2" height="2" fill="#fff" opacity="0.6"/></>}
-      <rect x="4" y="10" width="8" height="4" fill="#00e5ff"/>
-      <rect x="5" y="14" width="2" height="4" fill="#f4c07a"/><rect x="9" y="14" width="2" height="4" fill="#f4c07a"/>
-      <rect x="4" y="17" width="3" height="2" fill="#fff"/><rect x="9" y="17" width="3" height="2" fill="#fff"/>
-    </svg>;
-  }},
-  // 10: Jumping celebration
-  {label:"JUMP FOR JOY",render:({f})=>{
-    const jumpY=[0,-3,-5,-3][f];
-    const legSpread=[0,1,2,1][f];
-    return<svg width="140" height="200" viewBox="0 0 22 30" style={{imageRendering:"pixelated"}}>
-      <ellipse cx="11" cy="29" rx="8" ry="1" fill="rgba(255,45,120,0.4)"/>
-      <rect x={2} y={jumpY} width="8" height="1" fill="#c8860a"/>
-      <rect x={1} y={1+jumpY} width="2" height="3" fill="#c8860a"/>
-      <rect x={3} y={1+jumpY} width="6" height="4" fill="#f4c07a"/>
-      <rect x={4} y={2+jumpY} width="1" height="1" fill="#0a0010"/>
-      <rect x={7} y={2+jumpY} width="1" height="1" fill="#0a0010"/>
-      <rect x={4} y={3+jumpY} width="4" height="1" fill="#8B4513" opacity="0.7"/>
-      <rect x={4} y={5+jumpY} width="8" height="5" fill="#ff2d78"/>
-      {/* arms up in air */}
-      <rect x={1} y={3+jumpY} width="3" height="4" fill="#f4c07a"/>
-      <rect x={13} y={3+jumpY} width="3" height="4" fill="#f4c07a"/>
-      <rect x={4} y={10+jumpY} width="8" height="4" fill="#00e5ff"/>
-      <rect x={5-legSpread} y={14+jumpY} width="2" height="5" fill="#f4c07a"/>
-      <rect x={9+legSpread} y={14+jumpY} width="2" height="5" fill="#f4c07a"/>
-      <rect x={4-legSpread} y={18+jumpY} width="3" height="2" fill="#fff"/>
-      <rect x={9+legSpread} y={18+jumpY} width="3" height="2" fill="#fff"/>
-      {jumpY<-2&&<><rect x="0" y="26" width="3" height="1" fill="#e8ff3c"/><rect x="18" y="25" width="3" height="1" fill="#e8ff3c"/></>}
-    </svg>;
-  }},
-  // 11: Surfing
-  {label:"HANG LOOSE",render:({f})=>{
-    const wobble=[0,1,0,-1][f];
-    return<svg width="180" height="160" viewBox="0 0 34 22" style={{imageRendering:"pixelated"}}>
-      {/* ocean */}
-      <rect x="0" y="18" width="34" height="4" fill="#00a0cc"/>
-      <rect x={f*3%34} y="17" width="8" height="2" fill="#00c8ff" opacity="0.5"/>
-      <rect x={(f*3+15)%34} y="16" width="6" height="2" fill="#00c8ff" opacity="0.4"/>
-      {/* surfboard */}
-      <rect x="4" y={15+wobble} width="22" height="3" fill="#e8ff3c"/>
-      <rect x="5" y={16+wobble} width="20" height="1" fill="#ff2d78"/>
-      {/* guy on board sideways */}
-      <rect x="9" y={11+wobble} width="8" height="4" fill="#ff2d78"/>
-      {/* head */}
-      <rect x="15" y={8+wobble} width="5" height="4" fill="#f4c07a"/>
-      <rect x="15" y={8+wobble} width="5" height="1" fill="#c8860a"/>
-      <rect x="16" y={9+wobble} width="1" height="1" fill="#0a0010"/>
-      <rect x="18" y={9+wobble} width="1" height="1" fill="#0a0010"/>
-      {/* arms out for balance */}
-      <rect x="6" y={12+wobble} width="3" height="2" fill="#f4c07a"/>
-      <rect x="17" y={12+wobble} width="4" height="2" fill="#f4c07a"/>
-      {/* legs bent on board */}
-      <rect x="9" y={14+wobble} width="3" height="2" fill="#00e5ff"/>
-      <rect x="13" y={14+wobble} width="3" height="2" fill="#00e5ff"/>
-      {/* shaka hand */}
-      <rect x="20" y={11+wobble} width="3" height="1" fill="#f4c07a"/>
-      <rect x="22" y={10+wobble} width="1" height="2" fill="#f4c07a"/>
-      {/* splash */}
-      {f%2===0&&<><rect x="2" y="15" width="2" height="3" fill="#fff" opacity="0.6"/><rect x="28" y="14" width="2" height="3" fill="#fff" opacity="0.6"/></>}
-    </svg>;
-  }},
-  // 12: Push-up animation
-  {label:"ONE MORE REP",render:({f})=>{
-    const pushY=[2,1,0,1][f];
-    return<svg width="200" height="140" viewBox="0 0 34 20" style={{imageRendering:"pixelated"}}>
-      <ellipse cx="17" cy="19" rx="14" ry="1" fill="rgba(255,45,120,0.4)"/>
-      {/* body horizontal */}
-      <rect x="6" y={9+pushY} width="16" height="4" fill="#ff2d78"/>
-      {/* head */}
-      <rect x="21" y={7+pushY} width="5" height="5" fill="#f4c07a"/>
-      <rect x="21" y={7+pushY} width="5" height="1" fill="#c8860a"/>
-      <rect x="22" y={8+pushY} width="1" height="1" fill="#0a0010"/>
-      <rect x="24" y={8+pushY} width="1" height="1" fill="#0a0010"/>
-      {/* arms pushing */}
-      <rect x="20" y={10+pushY} width="4" height={4-pushY} fill="#f4c07a"/>
-      <rect x="8" y={10+pushY} width="4" height={4-pushY} fill="#f4c07a"/>
-      {/* fists on ground */}
-      <rect x="20" y="14" width="4" height="2" fill="#c8860a"/>
-      <rect x="8" y="14" width="4" height="2" fill="#c8860a"/>
-      {/* legs */}
-      <rect x="4" y={10+pushY} width="3" height="4" fill="#00e5ff"/>
-      <rect x="3" y="15" width="4" height="2" fill="#fff"/>
-      {/* sweat */}
-      {f===0&&<rect x="27" y={6+pushY} width="1" height="2" fill="#00e5ff"/>}
-      {/* count */}
-      <rect x="1" y="2" width="6" height="8" fill="#0a0010" opacity="0.7"/>
-      <rect x="2" y="3" width="4" height="6" fill="#e8ff3c" opacity="0.3"/>
-    </svg>;
-  }},
-  // 13: Rainbow appears overhead
-  {label:"RAINBOW POWER",render:({f})=>{
-    const rainbowW=[4,8,14,20][f];
-    return<svg width="140" height="180" viewBox="0 0 22 26" style={{imageRendering:"pixelated"}}>
-      {/* rainbow arcing */}
-      {f>0&&<><rect x={11-rainbowW/2} y="2" width={rainbowW} height="1" fill="#ff2d78"/>
-        <rect x={11-rainbowW/2+1} y="1" width={rainbowW-2} height="1" fill="#ff8c00"/>
-        <rect x={11-rainbowW/2+2} y="0" width={rainbowW-4} height="1" fill="#e8ff3c"/>
-        {f>1&&<rect x={11-rainbowW/2+3} y="0" width={rainbowW-6} height="1" fill="#00e5ff"/>}
-        {f>2&&<rect x={11-rainbowW/2+4} y="0" width={rainbowW-8} height="1" fill="#b44fff"/>}
-      </>}
-      <ellipse cx="11" cy="25" rx="8" ry="1" fill="rgba(255,45,120,0.4)"/>
-      <rect x="2" y="3" width="8" height="1" fill="#c8860a"/><rect x="1" y="4" width="2" height="3" fill="#c8860a"/>
-      <rect x="3" y="4" width="6" height="4" fill="#f4c07a"/>
-      <rect x="4" y="5" width="1" height="1" fill="#0a0010"/><rect x="7" y="5" width="1" height="1" fill="#0a0010"/>
-      <rect x="4" y="6" width="4" height="1" fill="#8B4513" opacity="0.6"/>
-      <rect x="4" y="8" width="8" height="5" fill="#ff2d78"/>
-      <rect x="2" y="9" width="2" height="3" fill="#f4c07a"/><rect x="12" y="9" width="2" height="3" fill="#f4c07a"/>
-      <rect x="4" y="13" width="8" height="4" fill="#00e5ff"/>
-      <rect x="5" y="17" width="2" height="4" fill="#f4c07a"/><rect x="9" y="17" width="2" height="4" fill="#f4c07a"/>
-      <rect x="4" y="20" width="3" height="2" fill="#fff"/><rect x="9" y="20" width="3" height="2" fill="#fff"/>
-    </svg>;
-  }},
-  // 14: Spinning kick
-  {label:"SPINNING KICK",render:({f})=>{
-    const rot=f*90;
-    return<svg width="140" height="180" viewBox="0 0 22 26" style={{imageRendering:"pixelated",transform:`rotate(${rot}deg)`,transformOrigin:"50% 50%"}}>
-      <rect x="2" y="0" width="8" height="1" fill="#c8860a"/><rect x="1" y="1" width="2" height="3" fill="#c8860a"/>
-      <rect x="3" y="1" width="6" height="4" fill="#f4c07a"/>
-      <rect x="4" y="2" width="1" height="1" fill="#0a0010"/><rect x="7" y="2" width="1" height="1" fill="#0a0010"/>
-      <rect x="3" y="4" width="6" height="1" fill="#8B4513"/>
-      <rect x="4" y="5" width="8" height="5" fill="#ff2d78"/>
-      <rect x="2" y="6" width="2" height="3" fill="#f4c07a"/>
-      <rect x="12" y="6" width="6" height="2" fill="#f4c07a"/>
-      <rect x="17" y="5" width="3" height="3" fill="#fff"/>
-      <rect x="4" y="10" width="8" height="4" fill="#00e5ff"/>
-      <rect x="5" y="14" width="2" height="5" fill="#f4c07a"/>
-      <rect x="9" y="14" width="2" height="3" fill="#f4c07a"/>
-      <rect x="4" y="18" width="3" height="2" fill="#fff"/>
-    </svg>;
-  }},
-  // 15: Kissing bicep
-  {label:"KISS THE GUN",render:({f})=>{
-    const kissY=[0,-1,-2,-1][f];
-    return<svg width="140" height="180" viewBox="0 0 22 26" style={{imageRendering:"pixelated"}}>
-      <ellipse cx="11" cy="25" rx="8" ry="1" fill="rgba(255,45,120,0.4)"/>
-      <rect x="2" y="0" width="8" height="1" fill="#c8860a"/><rect x="1" y="1" width="2" height="3" fill="#c8860a"/>
-      <rect x="3" y="1" width="6" height="4" fill="#f4c07a"/>
-      <rect x="4" y="2" width="1" height="1" fill="#0a0010"/><rect x="7" y="2" width="1" height="1" fill="#0a0010"/>
-      <rect x="4" y="3" width="4" height="1" fill="#8B4513" opacity="0.6"/>
-      {/* lips puckered */}
-      <rect x="5" y="3" width="2" height="1" fill="#ff2d78"/>
-      <rect x="4" y="5" width="8" height="5" fill="#ff2d78"/>
-      {/* left arm bent, bicep flexed */}
-      <rect x="0" y={3+kissY} width="4" height="3" fill="#f4c07a"/>
-      <rect x="0" y={5+kissY} width="4" height="2" fill="#e8860a"/>
-      {/* kissing the bicep */}
-      <rect x="3" y={2+kissY} width="2" height="1" fill="#ff69b4"/>
-      {/* right arm normal */}
-      <rect x="12" y="6" width="2" height="4" fill="#f4c07a"/>
-      <rect x="4" y="10" width="8" height="4" fill="#00e5ff"/>
-      <rect x="5" y="14" width="2" height="4" fill="#f4c07a"/><rect x="9" y="14" width="2" height="4" fill="#f4c07a"/>
-      <rect x="4" y="17" width="3" height="2" fill="#fff"/><rect x="9" y="17" width="3" height="2" fill="#fff"/>
-      {f>1&&<rect x="1" y={1+kissY} width="2" height="1" fill="#ff69b4" opacity="0.6"/>}
-    </svg>;
-  }},
-  // 16: Robot dance
-  {label:"ROBOT DANCE",render:({f})=>{
-    const stiff=[0,1,0,-1][f];
-    return<svg width="140" height="180" viewBox="0 0 22 26" style={{imageRendering:"pixelated"}}>
-      <ellipse cx="11" cy="25" rx="8" ry="1" fill="rgba(0,229,255,0.4)"/>
-      {/* robot head - square */}
-      <rect x="3" y="1" width="8" height="6" fill="#555"/>
-      <rect x="4" y="2" width="6" height="4" fill="#333"/>
-      {/* LED eyes */}
-      <rect x="5" y="3" width="2" height="2" fill={f%2===0?"#00e5ff":"#0090aa"}/>
-      <rect x="9" y="3" width="2" height="2" fill={f%2===0?"#ff2d78":"#aa0040"}/>
-      {/* antenna */}
-      <rect x="6" y="0" width="1" height="2" fill="#888"/>
-      <rect x="5" y="0" width="3" height="1" fill="#888"/>
-      <rect x="6" y="0" width="1" height="1" fill={f%2===0?"#e8ff3c":"#888"}/>
-      <rect x="3" y="7" width="8" height="5" fill="#444"/>
-      <rect x="4" y="8" width="6" height="3" fill="#333"/>
-      {/* chest panel */}
-      <rect x="5" y="8" width="1" height="1" fill="#ff2d78"/>
-      <rect x="7" y="8" width="1" height="1" fill="#00e5ff"/>
-      <rect x="9" y="8" width="1" height="1" fill="#e8ff3c"/>
-      {/* arms stiff */}
-      <rect x="0" y={5+stiff} width="3" height="5" fill="#666"/>
-      <rect x="13" y={5-stiff} width="3" height="5" fill="#666"/>
-      <rect x="3" y="12" width="8" height="4" fill="#444"/>
-      <rect x="5" y="16" width="2" height="5" fill="#555"/>
-      <rect x="9" y="16" width="2" height="5" fill="#555"/>
-      <rect x="4" y="20" width="3" height="2" fill="#666"/><rect x="9" y="20" width="3" height="2" fill="#666"/>
-    </svg>;
-  }},
-  // 17: Chest bump with Jess
-  {label:"CHEST BUMP!",render:({f})=>{
-    const dist=[6,3,1,3][f];
-    return<svg width="200" height="180" viewBox="0 0 36 26" style={{imageRendering:"pixelated"}}>
-      <ellipse cx="18" cy="25" rx="16" ry="1" fill="rgba(255,45,120,0.4)"/>
-      {/* MAX left side */}
-      <rect x={1} y="0" width="6" height="1" fill="#c8860a"/>
-      <rect x={1} y="1" width="6" height="4" fill="#f4c07a"/>
-      <rect x={2} y="2" width="1" height="1" fill="#0a0010"/>
-      <rect x={5} y="2" width="1" height="1" fill="#0a0010"/>
-      <rect x={1} y="5" width="8" height="5" fill="#ff2d78"/>
-      <rect x={-1} y="6" width="2" height="3" fill="#f4c07a"/>
-      <rect x={9+dist} y="6" width="2" height="3" fill="#f4c07a"/>
-      <rect x={1} y="10" width="8" height="3" fill="#00e5ff"/>
-      <rect x={2} y="13" width="2" height="5" fill="#f4c07a"/>
-      <rect x={6} y="13" width="2" height="5" fill="#f4c07a"/>
-      <rect x={1} y="17" width="3" height="2" fill="#fff"/>
-      <rect x={6} y="17" width="3" height="2" fill="#fff"/>
-      {/* JESS right side */}
-      <rect x={28} y="0" width="6" height="2" fill="#ff69b4"/>
-      <rect x={27} y="1" width="6" height="4" fill="#f4c07a"/>
-      <rect x={28} y="2" width="1" height="1" fill="#0a0010"/>
-      <rect x={31} y="2" width="1" height="1" fill="#0a0010"/>
-      <rect x={26} y="5" width="8" height="5" fill="#e8ff3c"/>
-      <rect x={24-dist} y="6" width="2" height="3" fill="#f4c07a"/>
-      <rect x={34} y="6" width="2" height="3" fill="#f4c07a"/>
-      <rect x={26} y="10" width="8" height="5" fill="#b44fff"/>
-      <rect x={27} y="15" width="2" height="3" fill="#ff2d78"/>
-      <rect x={31} y="15" width="2" height="3" fill="#ff2d78"/>
-      <rect x={26} y="17" width="3" height="2" fill="#fff"/>
-      <rect x={31} y="17" width="3" height="2" fill="#fff"/>
-      {/* impact stars */}
-      {f===2&&<><rect x="16" y="4" width="3" height="3" fill="#e8ff3c"/><rect x="17" y="3" width="1" height="5" fill="#e8ff3c"/><rect x="15" y="5" width="5" height="1" fill="#e8ff3c"/></>}
-    </svg>;
-  }},
-];
-
 const ExerciseCutscene=({exName,totalLifted,onDone})=>{
   const [frame,setFrame]=useState(0);
   const [countdown,setCountdown]=useState(5);
-  const [animIdx]=useState(()=>Math.floor(Math.random()*CUTSCENE_ANIMATIONS.length));
-  const anim=CUTSCENE_ANIMATIONS[animIdx];
 
   useEffect(()=>{
-    const fi=setInterval(()=>setFrame(f=>(f+1)%4),180);
+    const fi=setInterval(()=>setFrame(f=>(f+1)%4),200);
     const ci=setInterval(()=>setCountdown(c=>{if(c<=1){onDone();return 0;}return c-1;}),1000);
     return()=>{clearInterval(fi);clearInterval(ci);};
   },[]);
 
+  // Pumping guy animation frames
+  const PumpGuy=({f})=>{
+    const armY=[3,2,1,2][f];
+    const legL=[9,10,9,8][f];
+    const legR=[9,8,9,10][f];
+    return<svg width="80" height="120" viewBox="0 0 20 30" style={{imageRendering:"pixelated"}}>
+      {/* glow */}
+      <ellipse cx="10" cy="28" rx="7" ry="2" fill="rgba(255,45,120,0.3)"/>
+      {/* legs */}
+      <rect x="8" y={legL} width="3" height="6" fill="#ff2d78"/>
+      <rect x="12" y={legR} width="3" height="6" fill="#ff2d78"/>
+      {/* shoes */}
+      <rect x="7" y={legL+5} width="4" height="2" fill="#e8ff3c"/>
+      <rect x="11" y={legR+5} width="4" height="2" fill="#e8ff3c"/>
+      {/* body */}
+      <rect x="7" y="12" width="9" height="8" fill="#00e5ff"/>
+      {/* "M" on chest */}
+      <rect x="9" y="13" width="1" height="3" fill="#0a0010"/>
+      <rect x="11" y="13" width="1" height="3" fill="#0a0010"/>
+      <rect x="10" y="14" width="1" height="1" fill="#0a0010"/>
+      {/* arms - pumping */}
+      <rect x="3" y={armY+8} width="4" height="3" fill="#00e5ff"/>
+      <rect x="16" y={armY+8} width="4" height="3" fill="#00e5ff"/>
+      {/* fists */}
+      <rect x="2" y={armY+7} width="3" height="3" fill="#f4a460"/>
+      <rect x="17" y={armY+7} width="3" height="3" fill="#f4a460"/>
+      {/* head */}
+      <rect x="8" y="5" width="7" height="7" fill="#f4a460"/>
+      {/* eyes */}
+      <rect x="10" y="7" width="1" height="2" fill="#0a0010"/>
+      <rect x="13" y="7" width="1" height="2" fill="#0a0010"/>
+      {/* hair */}
+      <rect x="8" y="5" width="7" height="2" fill="#2d1b00"/>
+      {/* sweat drops */}
+      {f%2===0&&<rect x="6" y="6" width="1" height="2" fill="#00e5ff" opacity="0.7"/>}
+      {f%2===1&&<rect x="17" y="7" width="1" height="2" fill="#00e5ff" opacity="0.7"/>}
+    </svg>;
+  };
+
   const flashColor=["#ff2d78","#b44fff","#00e5ff","#e8ff3c"][frame];
 
   return<div style={{position:"fixed",inset:0,zIndex:1000,background:"#0a0010",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-start",padding:"40px 24px"}}>
+    {/* Flash border */}
     <div style={{position:"absolute",inset:0,border:`4px solid ${flashColor}`,pointerEvents:"none",transition:"border-color 0.1s"}}/>
-    <div style={{fontSize:8,color:"#444",letterSpacing:3,marginBottom:4,marginTop:20}}>EXERCISE COMPLETE</div>
-    <div style={{fontSize:frame%2===0?16:15,color:flashColor,fontFamily:"'Press Start 2P',monospace",textAlign:"center",lineHeight:1.8,textShadow:`0 0 30px ${flashColor}`,marginBottom:2}}>
+
+    {/* EXERCISE NAME */}
+    <div style={{fontSize:8,color:"#444",letterSpacing:3,marginBottom:8,marginTop:20}}>EXERCISE COMPLETE</div>
+    <div style={{fontSize:frame%2===0?16:15,color:flashColor,fontFamily:"'Press Start 2P',monospace",textAlign:"center",lineHeight:1.8,textShadow:`0 0 30px ${flashColor}`,transition:"font-size 0.1s",marginBottom:4}}>
       {exName.toUpperCase()}
     </div>
-    <div style={{fontSize:9,color:"#b44fff",fontFamily:"'Press Start 2P',monospace",marginBottom:12,letterSpacing:2}}>{anim.label}</div>
+    <div style={{fontSize:12,color:"#fff",fontFamily:"'Press Start 2P',monospace",marginBottom:32}}>COMPLETED!</div>
+
+    {/* Animation */}
     <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <anim.render f={frame}/>
+      <PumpGuy f={frame}/>
     </div>
+
+    {/* Stats */}
     <div style={{marginBottom:16,textAlign:"center"}}>
       <div style={{fontSize:7,color:"#888",marginBottom:8}}>YOU LIFTED</div>
       <div style={{fontSize:20,color:"#e8ff3c",fontFamily:"'Press Start 2P',monospace",textShadow:"0 0 20px #e8ff3c"}}>{totalLifted.toLocaleString()}</div>
       <div style={{fontSize:8,color:"#e8ff3c",marginTop:4}}>POUNDS</div>
     </div>
+
+    {/* Countdown + skip */}
     <button onClick={onDone} style={{background:"transparent",border:"2px solid #333",color:"#444",fontFamily:"'Press Start 2P',monospace",fontSize:7,padding:"10px 20px",cursor:"pointer",marginBottom:20}}>
       SKIP ({countdown})
     </button>
@@ -776,110 +546,95 @@ const ExerciseCutscene=({exName,totalLifted,onDone})=>{
 };
 
 // ─── MISSION COMPLETE SCREEN ─────────────────────────────
-const MissionComplete=({stats,onDone,victoryAudio})=>{
+const MissionComplete=({stats,onDone})=>{
   const [frame,setFrame]=useState(0);
-  const [sparks,setSparks]=useState([]);
+  const [fireworks,setFireworks]=useState([]);
 
   useEffect(()=>{
     const fi=setInterval(()=>setFrame(f=>(f+1)%4),180);
-    // Pixel sparks
-    const genSparks=()=>Array.from({length:16},(_,i)=>({
+    // Generate fireworks
+    const genFW=()=>Array.from({length:12},(_,i)=>({
       id:Date.now()+i,
-      x:5+Math.random()*90,
-      y:5+Math.random()*50,
-      color:["#ff2d78","#e8ff3c","#00e5ff","#b44fff","#fff"][Math.floor(Math.random()*5)],
-      size:Math.floor(Math.random()*3)+2,
+      x:10+Math.random()*80,
+      y:5+Math.random()*40,
+      color:["#ff2d78","#e8ff3c","#00e5ff","#b44fff","#fff","#ff8c00"][Math.floor(Math.random()*6)],
+      size:Math.random()*3+1,
     }));
-    setSparks(genSparks());
-    const si=setInterval(()=>setSparks(genSparks()),500);
-    return()=>{clearInterval(fi);clearInterval(si);try{if(victoryAudio){victoryAudio.pause();victoryAudio.currentTime=0;}}catch{}};
+    setFireworks(genFW());
+    const fwi=setInterval(()=>setFireworks(genFW()),600);
+    return()=>{clearInterval(fi);clearInterval(fwi);};
   },[]);
 
-  // Guy from homescreen pressing Jess overhead - same pixel style
+  // Max overhead pressing Jess
   const MaxPressJess=({f})=>{
     const pressY=[0,-2,-4,-2][f];
-    return<svg width="200" height="240" viewBox="0 0 30 36" style={{imageRendering:"pixelated"}}>
-      {/* ground glow */}
-      <ellipse cx="15" cy="35" rx="12" ry="1.5" fill="rgba(255,45,120,0.5)"/>
+    return<svg width="140" height="160" viewBox="0 0 35 40" style={{imageRendering:"pixelated"}}>
+      {/* Ground glow */}
+      <ellipse cx="17" cy="39" rx="14" ry="2" fill="rgba(255,45,120,0.4)"/>
 
-      {/* MAX - shoes */}
-      <rect x="8" y="32" width="4" height="2" fill="#fff"/>
-      <rect x="17" y="32" width="4" height="2" fill="#fff"/>
-      {/* MAX - legs */}
-      <rect x="9" y="27" width="3" height="5" fill="#00e5ff"/>
-      <rect x="18" y="27" width="3" height="5" fill="#00e5ff"/>
-      {/* MAX - pants detail */}
-      <rect x="9" y="29" width="3" height="1" fill="#0090aa"/>
-      <rect x="18" y="29" width="3" height="1" fill="#0090aa"/>
-      {/* MAX - shirt */}
-      <rect x="8" y="20" width="14" height="7" fill="#ff2d78"/>
-      {/* shirt detail */}
-      <rect x="13" y="21" width="1" height="3" fill="#c8860a"/>
-      <rect x="16" y="21" width="1" height="3" fill="#c8860a"/>
-      {/* MAX - arms pressing up */}
-      <rect x="2" y={13+pressY} width="6" height="3" fill="#ff2d78"/>
-      <rect x="22" y={13+pressY} width="6" height="3" fill="#ff2d78"/>
-      {/* MAX - fists */}
-      <rect x="1" y={11+pressY} width="3" height="4" fill="#f4c07a"/>
-      <rect x="26" y={11+pressY} width="3" height="4" fill="#f4c07a"/>
-      {/* MAX - head */}
-      <rect x="11" y="13" width="8" height="7" fill="#f4c07a"/>
-      {/* hair */}
-      <rect x="10" y="13" width="10" height="2" fill="#c8860a"/>
-      <rect x="9" y="14" width="2" height="3" fill="#c8860a"/>
-      {/* MAX - eyes (effort squint) */}
-      <rect x="13" y="16" width="2" height="1" fill="#0a0010"/>
-      <rect x="17" y="16" width="2" height="1" fill="#0a0010"/>
-      {/* MAX - gritting teeth */}
-      <rect x="13" y="18" width="4" height="1" fill="#0a0010"/>
-      <rect x="13" y="18" width="1" height="1" fill="#fff"/>
-      <rect x="15" y="18" width="1" height="1" fill="#fff"/>
-      <rect x="17" y="18" width="1" height="1" fill="#fff"/>
-      {/* sweat */}
-      {f%2===0&&<rect x="8" y="14" width="1" height="2" fill="#00e5ff" opacity="0.8"/>}
-      {f%2===1&&<rect x="22" y="15" width="1" height="2" fill="#00e5ff" opacity="0.8"/>}
+      {/* MAX - body */}
+      <rect x="12" y="20" width="9" height="8" fill="#00e5ff"/>
+      {/* M on chest */}
+      <rect x="14" y="21" width="1" height="3" fill="#0a0010"/>
+      <rect x="16" y="21" width="1" height="3" fill="#0a0010"/>
+      <rect x="15" y="22" width="1" height="1" fill="#0a0010"/>
+      {/* MAX legs - wide stance */}
+      <rect x="11" y="28" width="4" height="7" fill="#ff2d78"/>
+      <rect x="18" y="28" width="4" height="7" fill="#ff2d78"/>
+      <rect x="10" y="34" width="5" height="2" fill="#e8ff3c"/>
+      <rect x="17" y="34" width="5" height="2" fill="#e8ff3c"/>
+      {/* MAX arms - pressing up */}
+      <rect x="5" y={14+pressY} width="7" height="3" fill="#00e5ff"/>
+      <rect x="21" y={14+pressY} width="7" height="3" fill="#00e5ff"/>
+      <rect x="4" y={12+pressY} width="3" height="4" fill="#f4a460"/>
+      <rect x="26" y={12+pressY} width="3" height="4" fill="#f4a460"/>
+      {/* MAX head */}
+      <rect x="13" y="13" width="7" height="7" fill="#f4a460"/>
+      <rect x="13" y="13" width="7" height="2" fill="#2d1b00"/>
+      <rect x="15" y="15" width="1" height="2" fill="#0a0010"/>
+      <rect x="18" y="15" width="1" height="2" fill="#0a0010"/>
+      {/* effort mouth */}
+      <rect x="15" y="18" width="3" height="1" fill="#0a0010"/>
 
-      {/* JESS - overhead, same pixel style as Girl */}
-      {/* jess body horizontal */}
-      <rect x="4" y={5+pressY} width="22" height="5" fill="#e8ff3c"/>
-      {/* jess shirt detail */}
-      <rect x="4" y={7+pressY} width="22" height="1" fill="#b8cf00"/>
-      {/* jess skirt */}
-      <rect x="4" y={8+pressY} width="8" height="3" fill="#b44fff"/>
-      {/* jess legs horizontal */}
-      <rect x="3" y={7+pressY} width="3" height="2" fill="#f4c07a"/>
-      <rect x="3" y={9+pressY} width="3" height="2" fill="#f4c07a"/>
-      {/* jess shoes */}
-      <rect x="1" y={7+pressY} width="3" height="2" fill="#ff2d78"/>
-      <rect x="1" y={9+pressY} width="3" height="2" fill="#ff2d78"/>
-      {/* jess head */}
-      <rect x="24" y={4+pressY} width="5" height="6" fill="#f4c07a"/>
-      {/* pink hair */}
-      <rect x="23" y={3+pressY} width="7" height="3" fill="#ff69b4"/>
-      <rect x="28" y={4+pressY} width="2" height="4" fill="#ff69b4"/>
-      {/* jess eyes */}
-      <rect x="25" y={6+pressY} width="1" height="1" fill="#0a0010"/>
-      <rect x="27" y={6+pressY} width="1" height="1" fill="#0a0010"/>
-      {/* jess smile */}
-      <rect x="25" y={8+pressY} width="3" height="1" fill="#ff6688"/>
-      {/* stars when lifting */}
-      {f%2===0&&<><rect x="0" y={2+pressY} width="2" height="2" fill="#e8ff3c"/><rect x="28" y={1+pressY} width="2" height="2" fill="#e8ff3c"/></>}
-      {f%2===1&&<><rect x="1" y={3+pressY} width="1" height="1" fill="#00e5ff"/><rect x="29" y={2+pressY} width="1" height="1" fill="#ff2d78"/></>}
+      {/* JESS - overhead, laying flat */}
+      <rect x="6" y={6+pressY} width="20" height="5" fill="#ff2d78"/>
+      {/* Jess body details */}
+      <rect x="8" y={7+pressY} width="2" height="3" fill="#f4a460"/>
+      {/* Jess head */}
+      <rect x="24" y={5+pressY} width="6" height="6" fill="#f4a460"/>
+      <rect x="24" y={5+pressY} width="6" height="2" fill="#c41678"/>
+      <rect x="25" y={7+pressY} width="1" height="2" fill="#0a0010"/>
+      <rect x="27" y={7+pressY} width="1" height="2" fill="#0a0010"/>
+      <rect x="25" y={9+pressY} width="3" height="1" fill="#ff6688"/>
+      {/* Jess arms up for balance */}
+      <rect x="4" y={5+pressY} width="4" height="2" fill="#f4a460"/>
+      {/* Jess legs */}
+      <rect x="4" y={6+pressY} width="3" height="5" fill="#ff2d78"/>
+      {/* Stars around jess */}
+      {f%2===0&&<>
+        <rect x="2" y={3+pressY} width="2" height="2" fill="#e8ff3c"/>
+        <rect x="30" y={4+pressY} width="2" height="2" fill="#e8ff3c"/>
+      </>}
     </svg>;
   };
 
   return<div style={{position:"fixed",inset:0,zIndex:1000,background:"#0a0010",overflowY:"auto"}}>
-    {/* Pixel sparks */}
+    {/* Fireworks layer */}
     <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
-      {sparks.map(s=>(
-        <div key={s.id} style={{position:"absolute",left:`${s.x}%`,top:`${s.y}%`,width:s.size*4,height:s.size*4,background:s.color,imageRendering:"pixelated",boxShadow:`0 0 ${s.size*4}px ${s.color}`}}/>
+      {fireworks.map(fw=>(
+        <div key={fw.id} style={{position:"absolute",left:`${fw.x}%`,top:`${fw.y}%`,width:fw.size*4,height:fw.size*4,background:fw.color,borderRadius:"50%",boxShadow:`0 0 ${fw.size*6}px ${fw.color}`,transition:"all 0.3s"}}/>
       ))}
     </div>
+
     <div style={{position:"relative",zIndex:1,display:"flex",flexDirection:"column",alignItems:"center",padding:"40px 24px 100px"}}>
       <div style={{fontSize:7,color:"#e8ff3c",letterSpacing:3,marginBottom:12}}>🏆 🏆 🏆</div>
       <div style={{fontSize:14,color:"#e8ff3c",fontFamily:"'Press Start 2P',monospace",textAlign:"center",textShadow:"0 0 30px #e8ff3c",lineHeight:2,marginBottom:4}}>MISSION</div>
       <div style={{fontSize:14,color:"#ff2d78",fontFamily:"'Press Start 2P',monospace",textAlign:"center",textShadow:"0 0 30px #ff2d78",lineHeight:2,marginBottom:24}}>COMPLETE!</div>
+
+      {/* Animation */}
       <MaxPressJess f={frame}/>
+
+      {/* Stats grid */}
       <div style={{width:"100%",maxWidth:360,marginTop:24}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           {[
@@ -898,6 +653,7 @@ const MissionComplete=({stats,onDone,victoryAudio})=>{
           ))}
         </div>
       </div>
+
       <button className="btn-retro btn-yellow" onClick={onDone} style={{marginTop:24,fontSize:9,padding:"14px 28px",width:"100%",maxWidth:360}}>
         🕹️ BACK TO HOME
       </button>
@@ -968,20 +724,21 @@ const SUBSTITUTIONS = {
 // ─── TIMER (persistent, background-aware) ─────────────────
 const PersistentTimer=({seconds,timerState,setTimerState,onDone,beepAudio})=>{
   const [display,setDisplay]=useState(seconds);
+  const beeped=useRef(false);
   const rafRef=useRef(null);
 
   useEffect(()=>{
     if(!timerState.running) return;
+    beeped.current=false;
     const tick=()=>{
       const elapsed=(Date.now()-timerState.startedAt)/1000;
-      const rem=Math.max(0, timerState.totalSeconds - elapsed);
-      setDisplay(Math.ceil(rem));
-      if(rem<=0){
-        setTimerState(s=>({...s,running:false}));
-        if(beepAudio) { try { beepAudio.currentTime=0; beepAudio.play(); } catch {} }
-        if(navigator.vibrate) navigator.vibrate([300,100,300]);
+      const rem=timerState.totalSeconds - elapsed;
+      setDisplay(rem);
+      if(rem<=0 && !beeped.current){
+        beeped.current=true;
+        if(beepAudio){try{beepAudio.currentTime=0;beepAudio.play();}catch{}}
+        if(navigator.vibrate)navigator.vibrate([300,100,300]);
         onDone?.();
-        return;
       }
       rafRef.current=requestAnimationFrame(tick);
     };
@@ -989,43 +746,50 @@ const PersistentTimer=({seconds,timerState,setTimerState,onDone,beepAudio})=>{
     return()=>cancelAnimationFrame(rafRef.current);
   },[timerState.running, timerState.startedAt]);
 
-  // On mount, sync display
   useEffect(()=>{
     if(!timerState.running){
-      const elapsed=(Date.now()-timerState.startedAt)/1000;
-      const rem=Math.max(0,timerState.totalSeconds-elapsed);
-      setDisplay(Math.ceil(rem));
+      setDisplay(timerState.totalSeconds);
     }
   },[]);
 
-  const start=()=>setTimerState(s=>({...s,running:true,startedAt:Date.now(),totalSeconds:display>0?display:seconds}));
+  const start=()=>{
+    beeped.current=false;
+    setTimerState(s=>({...s,running:true,startedAt:Date.now(),totalSeconds:display>0?Math.ceil(display):seconds}));
+  };
   const pause=()=>{
     const elapsed=(Date.now()-timerState.startedAt)/1000;
-    const rem=Math.max(0,timerState.totalSeconds-elapsed);
-    setDisplay(Math.ceil(rem));
-    setTimerState(s=>({...s,running:false,totalSeconds:Math.ceil(rem)}));
+    const rem=timerState.totalSeconds-elapsed;
+    setDisplay(rem);
+    setTimerState(s=>({...s,running:false,totalSeconds:rem}));
   };
-  const reset=()=>{setDisplay(seconds);setTimerState(s=>({...s,running:false,totalSeconds:seconds,startedAt:Date.now()}))};
+  const reset=()=>{beeped.current=false;setDisplay(seconds);setTimerState(s=>({...s,running:false,totalSeconds:seconds,startedAt:Date.now()}))};
   const skip=()=>{setTimerState(s=>({...s,running:false}));onDone?.()};
 
-  const pct=Math.max(0,Math.min(100,((timerState.totalSeconds-display)/timerState.totalSeconds)*100));
-  const mins=Math.floor(display/60), secs=display%60, done=display<=0;
+  const isOver=display<0;
+  const pct=isOver?100:Math.max(0,Math.min(100,((timerState.totalSeconds-display)/timerState.totalSeconds)*100));
+  const absDisplay=Math.abs(display);
+  const mins=Math.floor(absDisplay/60), secs=Math.floor(absDisplay%60);
+  const displayStr=(isOver?"+":"")+mins+":"+(secs.toString().padStart(2,"0"));
+  const timerColor=isOver?"#ff2d78":display<=10?"#e8ff3c":"#00e5ff";
 
-  return<div className="card-retro" style={{padding:16,margin:"12px 0"}}>
-    <div style={{fontSize:7,color:"#b44fff",letterSpacing:2,marginBottom:10}}>// REST TIMER //</div>
+  return<div className="card-retro" style={{padding:16,margin:"12px 0",borderColor:isOver?"#ff2d78":"#333",boxShadow:isOver?"0 0 16px rgba(255,45,120,.4)":"none"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+      <div style={{fontSize:7,color:"#b44fff",letterSpacing:2}}>// REST TIMER //</div>
+      {isOver&&<div style={{fontSize:6,color:"#ff2d78",letterSpacing:1}} className="blink">OVER REST</div>}
+    </div>
     <div style={{display:"flex",alignItems:"center",gap:16}}>
-      <div style={{fontSize:28,color:done?"#e8ff3c":"#00e5ff",fontFamily:"'Press Start 2P',monospace",textShadow:done?"0 0 20px #e8ff3c":"0 0 20px #00e5ff",minWidth:80}}>
-        {mins}:{secs.toString().padStart(2,"0")}
+      <div style={{fontSize:28,color:timerColor,fontFamily:"'Press Start 2P',monospace",textShadow:`0 0 20px ${timerColor}`,minWidth:90}}>
+        {displayStr}
       </div>
       <div style={{flex:1}}>
-        <div className="progress-bar-retro"><div className="progress-bar-fill" style={{width:`${pct}%`}}/></div>
-        <div style={{fontSize:7,color:"#444",marginTop:4}}>{timerState.totalSeconds}s TOTAL</div>
+        <div className="progress-bar-retro"><div className="progress-bar-fill" style={{width:`${pct}%`,background:isOver?"linear-gradient(90deg,#ff2d78,#b44fff)":undefined}}/></div>
+        <div style={{fontSize:7,color:"#444",marginTop:4}}>{timerState.totalSeconds}s TARGET</div>
       </div>
     </div>
     <div style={{display:"flex",gap:8,marginTop:12}}>
       <button className="btn-retro btn-ghost" onClick={reset} style={{fontSize:7,padding:"6px 10px"}}>RST</button>
       <button className={`btn-retro ${timerState.running?"btn-ghost":"btn-cyan"}`} onClick={timerState.running?pause:start} style={{fontSize:7,flex:1}}>
-        {timerState.running?"⏸ PAUSE":done?"✓ DONE":timerState.totalSeconds<seconds?"▶ RESUME":"▶ START"}
+        {timerState.running?"⏸ PAUSE":isOver?"▶ RESUME":timerState.totalSeconds<seconds?"▶ RESUME":"▶ START"}
       </button>
       <button className="btn-retro btn-ghost" onClick={skip} style={{fontSize:7,padding:"6px 10px"}}>SKP</button>
     </div>
@@ -1033,7 +797,8 @@ const PersistentTimer=({seconds,timerState,setTimerState,onDone,beepAudio})=>{
 };
 
 // ─── WORKOUT SCREEN ───────────────────────────────────────
-const WorkoutScreen=({dayKey,appData,onComplete,onBack,beepAudio,victoryAudio})=>{
+const WorkoutScreen=({dayKey,appData,onComplete,onBack,beepAudio})=>{
+  const PROGRAM=buildProgram(appData);
   const day=PROGRAM[dayKey];
   const [exIdx,setExIdx]=useState(0);
   const [sets,setSets]=useState(()=>day.exercises.map(ex=>{
@@ -1044,7 +809,7 @@ const WorkoutScreen=({dayKey,appData,onComplete,onBack,beepAudio,victoryAudio})=
   const [showSub,setShowSub]=useState(false);
   const [sessionStart]=useState(()=>Date.now());
   const [elapsed,setElapsed]=useState(0);
-  const [timerState,setTimerState]=useState({running:false,startedAt:0,totalSeconds:180});
+  const [timerState,setTimerState]=useState(()=>({running:false,startedAt:Date.now(),totalSeconds:180}));
   const [cutscene,setCutscene]=useState(null); // {exName, totalLifted}
   const [showMission,setShowMission]=useState(false);
 
@@ -1055,7 +820,7 @@ const WorkoutScreen=({dayKey,appData,onComplete,onBack,beepAudio,victoryAudio})=
   },[]);
 
   const ex=day.exercises[exIdx];
-  const restSecs=ex.type==="compound"?day.restCompound:day.restAccessory;
+  const restSecs=ex.restSeconds||(ex.type==="compound"?day.restCompound:day.restAccessory);
   const total=day.exercises.reduce((a,e)=>a+e.sets,0);
   const doneCount=sets.reduce((a,e)=>a+e.filter(s=>s.done).length,0);
 
@@ -1074,18 +839,16 @@ const WorkoutScreen=({dayKey,appData,onComplete,onBack,beepAudio,victoryAudio})=
   });
 
   const markDone=(ei,si)=>{
-    // Unlock + play beeps synchronously inside user gesture (iOS requirement)
-    try{getAudioCtx();}catch{}
-    [0,150,300,500,700].forEach((t,i)=>setTimeout(()=>playBeep(660+i*110,0.1,0.15),t));
     setSets(p=>{
       const n=p.map(e=>[...e]);
       n[ei][si]={...n[ei][si],done:true};
+      // Check if all sets of this exercise are now done
       const allDone=n[ei].every(s=>s.done);
-      const isLastExercise=ei===day.exercises.length-1;
-      if(allDone && !isLastExercise){
+      if(allDone){
         const exDone=day.exercises[ei];
         const totalLifted=n[ei].reduce((acc,s)=>acc+(s.weight||0)*(s.reps||0),0);
-        setTimeout(()=>setCutscene({exName:exDone.name,totalLifted,nextExIdx:ei+1}),50);
+        const nextIdx=ei<day.exercises.length-1?ei+1:null;
+        setTimeout(()=>setCutscene({exName:exDone.name,totalLifted,nextExIdx:nextIdx}),50);
       }
       return n;
     });
@@ -1116,7 +879,7 @@ const WorkoutScreen=({dayKey,appData,onComplete,onBack,beepAudio,victoryAudio})=
       const k=`${dayKey}__${ex.id}`,best=sets[i].filter(s=>s.done).sort((a,b)=>b.weight-a.weight)[0];
       if(best){if(!newLogs[k])newLogs[k]=[];newLogs[k].push({date:Date.now(),weight:best.weight,reps:best.reps});if(newLogs[k].length>20)newLogs[k]=newLogs[k].slice(-20);}
     });
-    const nd={...appData,logs:newLogs,workoutCount:(appData.workoutCount||0)+1};
+    const nd={...appData,logs:newLogs,workoutCount:(appData.workoutCount||0)+1,lastDone:{...(appData.lastDone||{}),[dayKey]:Date.now()}};
     saveData(nd);
     // Show mission complete screen
     const totalSets=sets.reduce((a,e)=>a+e.filter(s=>s.done).length,0);
@@ -1136,8 +899,7 @@ const WorkoutScreen=({dayKey,appData,onComplete,onBack,beepAudio,victoryAudio})=
   const sessionMins=Math.floor(elapsed/60),sessionSecs=elapsed%60;
   const subs=SUBSTITUTIONS[ex.id]||[];
 
-  return(<>
-    <div className="slide-in" style={{padding:"0 16px 120px"}}>
+  return<><div className="slide-in" style={{padding:"0 16px 120px"}}>
     {/* Header */}
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 0 12px"}}>
       <div style={{display:"flex",alignItems:"center",gap:12}}>
@@ -1198,7 +960,7 @@ const WorkoutScreen=({dayKey,appData,onComplete,onBack,beepAudio,victoryAudio})=
           <div style={{fontSize:9,color:s.done?"#1a6a1a":"#444"}}>{s.done?"✓":si+1}</div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:3}}>
             <button className="btn-retro btn-ghost" disabled={s.done} onMouseDown={e=>{e.preventDefault();updWeight(exIdx,si,Math.max(0,(s.weight||0)-5))}} style={{fontSize:10,padding:"4px 5px",opacity:s.done?.3:1}}>-</button>
-            <input className="input-retro" type="number" value={s.weight||""} disabled={s.done}
+            <input className="input-retro" type="text" inputMode="decimal" value={s.weight||""} disabled={s.done}
               onFocus={e=>{e.target.select()}}
               onChange={e=>{const v=parseFloat(e.target.value)||0;updWeight(exIdx,si,v)}}
               style={{width:50,fontSize:11}}/>
@@ -1206,7 +968,7 @@ const WorkoutScreen=({dayKey,appData,onComplete,onBack,beepAudio,victoryAudio})=
           </div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:3}}>
             <button className="btn-retro btn-ghost" disabled={s.done} onMouseDown={e=>{e.preventDefault();upd(exIdx,si,"reps",Math.max(1,(s.reps||1)-1))}} style={{fontSize:10,padding:"4px 5px",opacity:s.done?.3:1}}>-</button>
-            <input className="input-retro" type="number" value={s.reps||""} disabled={s.done}
+            <input className="input-retro" type="text" inputMode="numeric" value={s.reps||""} disabled={s.done}
               onFocus={e=>{e.target.select()}}
               onChange={e=>upd(exIdx,si,"reps",parseInt(e.target.value)||1)}
               style={{width:44,fontSize:11}}/>
@@ -1227,27 +989,31 @@ const WorkoutScreen=({dayKey,appData,onComplete,onBack,beepAudio,victoryAudio})=
       beepAudio={beepAudio}
     />
 
-    {doneCount===total&&<button className="btn-retro btn-yellow" style={{width:"100%",fontSize:10,marginTop:8}} onClick={async()=>{const va=victoryAudio?.current;if(va){va.currentTime=0;try{await va.play();}catch(e){console.log("victory play error",e);}}complete();}}>🏆 MISSION COMPLETE!</button>}
-    {cutscene&&<ExerciseCutscene exName={cutscene.exName} totalLifted={cutscene.totalLifted} onDone={()=>{if(cutscene.nextExIdx!==null)setExIdx(cutscene.nextExIdx);setCutscene(null);}}/>}
-    {showMission&&<MissionComplete stats={showMission} onDone={()=>{const va=victoryAudio?.current;if(va){va.pause();va.currentTime=0;}setShowMission(false);onComplete(showMission._nd);}}/>}
+    {doneCount===total&&<button className="btn-retro btn-yellow" style={{width:"100%",fontSize:10,marginTop:8}} onClick={complete}>🏆 MISSION COMPLETE!</button>}
   </div>
-  </>);};
+  {cutscene&&<ExerciseCutscene exName={cutscene.exName} totalLifted={cutscene.totalLifted} onDone={()=>{if(cutscene.nextExIdx!==null)setExIdx(cutscene.nextExIdx);setCutscene(null);}}/>}
+  {showMission&&<MissionComplete stats={showMission} onDone={()=>{setShowMission(false);onComplete(showMission._nd);}}/>}
+  </>;
+};
 
 
 const ProgressScreen=({appData,audio})=>{
-  const [sel,setSel]=useState("UPPER-A");
-  const day=PROGRAM[sel];
+  const PROGRAM=buildProgram(appData);
+  const DAY_ORDER=getProgramOrder(appData);
+  const [sel,setSel]=useState(DAY_ORDER[0]||"");
+  const day=sel?PROGRAM[sel]:null;
   return<div className="slide-in" style={{padding:"0 16px 100px"}}>
     <div style={{fontSize:10,color:"#00e5ff",padding:"16px 0 14px",textShadow:"0 0 15px #00e5ff"}}>POWER LEVEL STATS</div>
     <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
       {DAY_ORDER.map(d=><button key={d} className={`btn-retro ${sel===d?"btn-cyan":"btn-ghost"}`} style={{fontSize:6,padding:"6px 8px"}} onClick={()=>{setSel(d);audio.click()}}>{PROGRAM[d].label}</button>)}
     </div>
-    {day.exercises.map(ex=>{
+    {!day&&<div style={{fontSize:7,color:"#444",textAlign:"center",padding:24}}>NO TRAININGS YET</div>}
+    {day&&day.exercises.map(ex=>{
       const k=`${sel}__${ex.id}`,logs=appData.logs?.[k]||[],last=logs[logs.length-1];
       return<div key={ex.id} className="card-retro" style={{padding:12,marginBottom:10}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
           <div style={{fontSize:8,color:"#fff",flex:1,lineHeight:1.6}}>{ex.name}</div>
-          {last&&<div style={{textAlign:"right"}}><div style={{fontSize:11,color:"#e8ff3c"}}>{last.weight}lb</div><div style={{fontSize:7,color:"#444"}}>x={last.reps}</div></div>}
+          {last&&<div style={{textAlign:"right"}}><div style={{fontSize:11,color:"#e8ff3c"}}>{last.weight}lb</div><div style={{fontSize:7,color:"#444"}}>x{last.reps}</div></div>}
         </div>
         <PixelChart data={logs} color={ex.type==="compound"?"#ff2d78":"#00e5ff"}/>
         {!logs.length&&<div style={{fontSize:7,color:"#333",textAlign:"center",padding:8}}><span className="blink">_</span> NO DATA YET</div>}
@@ -1310,14 +1076,11 @@ function App(){
   const audio=useAudio();
   const musicRef=useRef(null);
   const beepRef=useRef(null);
-  const victoryRef=useRef(null);
   const [musicPlaying,setMusicPlaying]=useState(false);
   useEffect(()=>{
     musicRef.current=createMusicEngine();
     beepRef.current=new Audio("beep.mp3");
     beepRef.current.volume=0.8;
-    victoryRef.current=new Audio("victory.mp3");
-    victoryRef.current.volume=0.9;
   },[]);
   const toggleMusic=async()=>{
     if(!musicRef.current)return;
@@ -1330,8 +1093,8 @@ function App(){
     <BG/>
     <Scanlines/>
     <div style={{position:"relative",zIndex:10}}>
-      {view==="home"&&<HomeScreen appData={appData} onStart={startWorkout} audio={audio} onToggleMusic={toggleMusic} musicPlaying={musicPlaying}/>}
-      {view==="workout"&&activeDay&&<WorkoutScreen dayKey={activeDay} appData={appData} onComplete={completeWorkout} onBack={()=>setView("home")} audio={audio} beepAudio={beepRef.current} victoryAudio={victoryRef}/>}
+      {view==="home"&&<HomeScreen appData={appData} setAppData={setAppData} onStart={startWorkout} audio={audio} onToggleMusic={toggleMusic} musicPlaying={musicPlaying}/>}
+      {view==="workout"&&activeDay&&<WorkoutScreen dayKey={activeDay} appData={appData} onComplete={completeWorkout} onBack={()=>setView("home")} audio={audio} beepAudio={beepRef.current}/>}
       {view==="progress"&&<ProgressScreen appData={appData} audio={audio}/>}
     </div>
     {view!=="workout"&&<Nav active={view} onNav={setView}/>}
